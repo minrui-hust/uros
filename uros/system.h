@@ -18,6 +18,8 @@ template <typename... Transports> struct System {
   template <typename TMsg>
   using SubscriptionHandleT = SubscriptionT<TransportManager, TMsg> *;
 
+  using Message = MsgBase;
+
   template <typename TMsg>
   static bool RegisterTopic(const char *topic_name, const int32_t topic_id) {
     auto topic = TopicManager::AddTopic<TopicT<TransportManager, TMsg>>(
