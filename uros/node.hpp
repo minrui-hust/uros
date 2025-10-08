@@ -1,0 +1,103 @@
+#pragma once
+
+#include "node.h"
+
+#include "publisher.h"
+#include "subscription.h"
+#include "topic.h"
+
+namespace uros {
+
+template <typename TransportManager>
+template <typename TMsg>
+SubscriptionT<TransportManager, TMsg> *
+NodeT<TransportManager>::createSubscription(
+    const char *topic_name, const std::function<void(const TMsg &)> &cb) {
+  using Topic = TopicT<TransportManager, TMsg>;
+  using Subscription = SubscriptionT<TransportManager, TMsg>;
+
+  if (subs_.full()) {
+    return nullptr;
+  }
+
+  auto topic = TopicManager::FindTopic<Topic>(topic_name);
+  if (!topic) {
+    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
+    return nullptr;
+  }
+
+  auto sub = std::make_unique<Subscription>(&evt_, subs_.size());
+  UROS_ASSERT(sub);
+
+  sub->subscribe(topic, cb);
+
+  if (!topic->registerSubscription(sub.get())) {
+    return nullptr;
+  }
+
+  wait_set_ |= sub->bitMask();
+
+  return static_cast<Subscription *>(subs_.emplace_back(std::move(sub)).get());
+}
+
+template <typename TransportManager>
+template <typename TMsg>
+PublisherT<TransportManager, TMsg> *
+NodeT<TransportManager>::createPublisher(const char *topic_name) {
+  using Topic = TopicT<TransportManager, TMsg>;
+  using Publisher = PublisherT<TransportManager, TMsg>;
+
+  if (pubs_.full()) {
+    return nullptr;
+  }
+
+  auto topic = TopicManager::FindTopic<Topic>(topic_name);
+  if (!topic) {
+    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
+    return nullptr;
+  }
+
+  auto pub = std::make_unique<Publisher>();
+  UROS_ASSERT(pub);
+
+  pub->advertise(topic);
+
+  if (!topic->registerPublisher(pub.get())) {
+    return nullptr;
+  }
+
+  return static_cast<Publisher *>(pubs_.emplace_back(std::move(pub)).get());
+}
+
+template <typename TransportManager> void NodeT<TransportManager>::spin() {
+  while (true) {
+    spinOnce(-1);
+  }
+}
+
+template <typename TransportManager>
+void NodeT<TransportManager>::spinOnce(int32_t timeout_ms) {
+  auto flags = evt_.wait(wait_set_, true, false, timeout_ms);
+
+  // new event may set when program reach here, the new topic data will
+  // processed by the logic below,but event bit is not cleared, so wait will
+  // successed and return immeidiately next turn, which would bring
+  // redundant data. in case of this situation, generation should be checked
+  // in spinOnce
+
+  // process subscriptions
+  for (auto i = 0u; i < subs_.size(); ++i) {
+    if (flags & (1 << i)) {
+      subs_[i]->spinOnce();
+    }
+  }
+
+  // TODO: process servers
+  // for (auto i = 0u; i < srvs_.size(); ++i) {
+  //   if (flags & (1 << (i + 16))) {
+  //     srvs_[i]->spinOnce();
+  //   }
+  // }
+}
+
+} // namespace uros
