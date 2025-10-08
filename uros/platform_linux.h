@@ -17,6 +17,7 @@
 #define UROS_PRINT (void)
 #endif
 
+namespace uros {
 using type_id_t = uint64_t;
 
 // EventBits 定义
@@ -285,7 +286,8 @@ protected:
 
 struct MessageBuffer {
   MessageBuffer(size_t capacity)
-      : capacity_(capacity), read_pos_(0), read_turn_(0), write_pos_(0), write_turn_(0) {
+      : capacity_(capacity), read_pos_(0), read_turn_(0), write_pos_(0),
+        write_turn_(0) {
     buffer_ = new uint8_t[capacity];
   }
 
@@ -447,10 +449,11 @@ protected:
   uint8_t *buffer_;                  // 环形缓冲区
   size_t capacity_;                  // 缓冲区容量
   size_t read_pos_;                  // 读位置
-  size_t read_turn_;                  // 读位置圈数
+  size_t read_turn_;                 // 读位置圈数
   size_t write_pos_;                 // 写位置
-  size_t write_turn_;                 // 写位置圈数
+  size_t write_turn_;                // 写位置圈数
   mutable std::mutex mutex_;         // 互斥锁
   std::condition_variable cv_data_;  // 有数据的条件变量
   std::condition_variable cv_space_; // 有空间的条件变量
 };
+} // namespace uros
