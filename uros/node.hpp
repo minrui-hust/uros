@@ -20,8 +20,9 @@ NodeT<TransportManager>::createSubscription(
     return nullptr;
   }
 
-  auto topic = TopicManager::FindOrAdd<Topic>(topic_name);
+  auto topic = TopicManager::FindTopic<Topic>(topic_name);
   if (!topic) {
+    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
     return nullptr;
   }
 
@@ -50,9 +51,9 @@ NodeT<TransportManager>::createPublisher(const char *topic_name) {
     return nullptr;
   }
 
-  auto topic = TopicManager::FindOrAdd<Topic>(topic_name);
+  auto topic = TopicManager::FindTopic<Topic>(topic_name);
   if (!topic) {
-    UROS_PRINT("Failed to find or create topic: '%s'\n", topic_name);
+    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
     return nullptr;
   }
 

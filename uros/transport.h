@@ -17,13 +17,13 @@ struct TopicMeta {
   TopicBase *topic = nullptr;
 };
 
-template <typename Derived> struct TransportBase {
+struct TransportInterface {};
 
-  bool declareTopic(const char *topic_name, const int32_t topic_id);
+template <typename Derived> struct TransportBase : public TransportInterface {
+
+  bool declareTopic(const char *topic_name);
 
   void init() { derived().initImpl(); }
-
-  int32_t registerTopic(TopicBase *topic);
 
   // write to transport should be non-blocking
   template <typename Topic>
@@ -44,6 +44,10 @@ protected:
 };
 
 template <typename... TTransports> struct TransportManagerT {
+  // Get the type of the Idx-th transport
+  template <size_t Idx>
+  using TransportType = std::tuple_element_t<Idx, std::tuple<TTransports...>>;
+
   template <template <typename> class Transform,
             template <typename...> class Target>
   using ApplyTransports = Target<typename Transform<TTransports>::type...>;
@@ -63,16 +67,10 @@ template <typename... TTransports> struct TransportManagerT {
 
   static auto &Transports() { return Instance().transports(); }
 
-  template <typename Topic> static int32_t RegisterTopic(Topic *topic) {
-    return Instance().registerTopic(topic);
-  }
-
 protected:
   template <size_t Idx> auto &transport() { return std::get<Idx>(transports_); }
 
   auto &transports() { return transports_; }
-
-  template <typename Topic> int32_t registerTopic(Topic *topic);
 
   void init();
 

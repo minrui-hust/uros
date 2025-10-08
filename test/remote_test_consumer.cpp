@@ -3,25 +3,13 @@
 #include <chrono>
 
 #include "uros/uros.h"
+#include "uros/transport_local.h"
 #include "uros/transport_remote_socket.h"
 
 using namespace std::chrono_literals;
 
 // 使用 TransportLocal + TransportRemoteSocket
 using Uros = uros::System<uros::TransportLocal, uros::TransportRemoteSocket>;
-
-void uros_init() {
-  // Transport 0: TransportLocal
-  auto &transport_local = Uros::Transport<0>();
-  transport_local.declareTopic("/sensor_data", 0);
-  
-  // Transport 1: 从 Relay (10003) 接收数据，监听 10004
-  auto &transport = Uros::Transport<1>();
-  transport.initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
-  transport.declareTopic("/sensor_data", 0);
-  
-  Uros::Init();
-}
 
 // 传感器数据消息（与 Producer 定义一致）
 struct SensorData : uros::MsgBase {
@@ -30,6 +18,22 @@ struct SensorData : uros::MsgBase {
   float temperature;
   float humidity;
 };
+
+void uros_init() {
+  // 注册 topic
+  Uros::RegisterTopic<SensorData>("/sensor_data", 0);
+  
+  // Transport 0: TransportLocal
+  auto &transport_local = Uros::Transport<0>();
+  transport_local.declareTopic("/sensor_data");
+  
+  // Transport 1: 从 Relay (10003) 接收数据，监听 10004
+  auto &transport = Uros::Transport<1>();
+  transport.initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
+  transport.declareTopic("/sensor_data");
+  
+  Uros::Init();
+}
 
 int main() {
   std::cout << "=== Data Consumer (Port 10004) ===" << std::endl;

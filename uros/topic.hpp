@@ -6,41 +6,25 @@
 
 #include "publisher.h"
 #include "subscription.h"
-#include "transport_local.h"
 
 namespace uros {
-
-template <typename TransportManager, typename TMsg>
-template <size_t Idx, typename Transport>
-void TopicT<TransportManager, TMsg>::setTransport(Transport *transport) {
-  std::get<Idx>(transports_) = transport;
-}
 
 template <typename TransportManager, typename TMsg>
 void TopicT<TransportManager, TMsg>::write(const TMsg &msg) {
   UROS_PRINT("Write message to topic '%s'\n", name());
 
-  // first write to TransportLocal
-  auto &transport_local = std::get<TransportLocal *>(transports_);
-  if (transport_local) {
-    transport_local->write(this, msg);
-  }
-
-  // broadcast write on all other transport
-  std::apply(
-      [&](auto &&...transports) {
-        (([&](auto &&transport) {
-           // skip TransportLocal, processed already
-           if constexpr (!std::is_same_v<std::decay_t<decltype(transport)>,
-                                         TransportLocal *>) {
-             if (transport != nullptr) {
-               transport->write(this, msg);
-             }
-           }
-         }(transports)),
-         ...);
-      },
-      transports_);
+  // iterate on all transport
+  [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    (([&]() {
+       using TransportType =
+           typename TransportManager::template TransportType<Is>;
+       auto tsp = static_cast<TransportType *>(transports_[Is]);
+       if (tsp != nullptr) {
+         tsp->write(this, msg);
+       }
+     }()),
+     ...);
+  }(std::make_index_sequence<TransportManager::size>{});
 }
 
 template <typename TransportManager, typename TMsg>
@@ -73,63 +57,72 @@ void TopicT<TransportManager, TMsg>::update(const TMsg &msg) {
 template <typename TransportManager, typename TMsg>
 void TopicT<TransportManager, TMsg>::recv(const int32_t tsp_id,
                                           const MsgBase *msg) {
-  // first route to TransportLocal
-  auto &transport_local = std::get<TransportLocal *>(transports_);
-  if (transport_local) {
-    transport_local->write(this, *static_cast<const TMsg *>(msg));
-  }
 
-  // route msg to other non-local transport with id other than tsp_id
-  std::apply(
-      [&](auto &&...transports) {
-        (([&](auto &&transport) {
-           // skip TransportLocal
-           if constexpr (!std::is_same_v<std::decay_t<decltype(transport)>,
-                                         TransportLocal *>) {
-             if (transport != nullptr && transport->id() != tsp_id) {
-               transport->write(this, *static_cast<const TMsg *>(msg));
-             }
-           }
-         }(transports)),
-         ...);
-      },
-      transports_);
+  // iterate on all transport
+  [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    (([&]() {
+       using TransportType =
+           typename TransportManager::template TransportType<Is>;
+       auto tsp = static_cast<TransportType *>(transports_[Is]);
+       if (tsp != nullptr && tsp->id() != tsp_id) {
+         tsp->write(this, *static_cast<const TMsg *>(msg));
+       }
+     }()),
+     ...);
+  }(std::make_index_sequence<TransportManager::size>{});
 }
 
-template <typename Topic> Topic *TopicManager::findOrAdd(const char *name) {
+template <typename TransportManager, typename TMsg>
+void TopicT<TransportManager, TMsg>::setTransport(const int32_t tsp_id,
+                                                  TransportInterface *tsp) {
+  if (tsp_id < transports_.size()) {
+    transports_[tsp_id] = tsp;
+  }
+}
+
+template <typename Topic>
+Topic *TopicManager::addTopic(const char *name, int32_t id) {
   using TransportManager = typename Topic::TransportManager;
   using Msg = typename Topic::Msg;
 
+  if (id >= topics_.size()) {
+    return nullptr;
+  }
+
+  auto &topic = topics_[id];
+  if (topic) {
+    if (topic->id() == id && strcmp(topic->name(), name) == 0) {
+      return static_cast<Topic *>(topic.get());
+    } else {
+      return nullptr;
+    }
+  }
+
+  topic = std::make_unique<Topic>(name, id);
+  UROS_ASSERT(topic);
+
+  return static_cast<Topic *>(topic.get());
+}
+
+template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
   // find first
   for (auto i = 0u; i < topics_.size(); ++i) {
     auto &tp = topics_[i];
-    if (strcmp(tp->name(), name) == 0) {
-      if (tp->msgType() == type_id<Msg>()) {
-        return static_cast<Topic *>(tp.get());
+    if (tp != nullptr && strcmp(tp->name(), name) == 0) {
+      if constexpr (std::is_same_v<Topic, TopicBase>) {
+        return tp.get();
       } else {
-        UROS_PRINT("topic found but msg type mismatch\n");
-        return nullptr; // topic exist but type mismatch
+        if (tp->msgType() == type_id<typename Topic::Msg>()) {
+          return static_cast<Topic *>(tp.get());
+        } else {
+          UROS_PRINT("topic found but msg type mismatch\n");
+          return nullptr; // topic exist but type mismatch
+        }
       }
     }
   }
 
-  // not found, try add
-  if (topics_.full()) {
-    UROS_PRINT("Max topic number reached\n");
-    return nullptr;
-  }
-
-  auto tp = std::make_unique<Topic>(name);
-  UROS_ASSERT(tp);
-
-  tp->id() = TransportManager::RegisterTopic(tp.get());
-  if (tp->id() < 0) {
-    UROS_PRINT("Failed to register topic on any transport\n");
-    return nullptr;
-  }
-  UROS_PRINT("topic_id for '%s': %d\n", tp->name(), tp->id());
-
-  return static_cast<Topic *>(topics_.emplace_back(std::move(tp)).get());
+  return nullptr;
 }
 
 } // namespace uros

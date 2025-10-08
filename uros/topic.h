@@ -13,10 +13,9 @@
 namespace uros {
 
 struct TopicBase {
-  TopicBase(const char *name, type_id_t msg_type, size_t msg_size)
-      : name_(name), msg_type_(msg_type), msg_size_(msg_size) {}
+  TopicBase(const char *name, int32_t id, type_id_t msg_type, size_t msg_size)
+      : name_(name), id_(id), msg_type_(msg_type), msg_size_(msg_size) {}
 
-  int32_t &id() { return id_; }
   const int32_t &id() const { return id_; }
 
   const char *name() const { return name_; }
@@ -46,6 +45,8 @@ struct TopicBase {
   // this should be non-blocking
   virtual void recv(const int32_t tsp_id, const MsgBase *msg) = 0;
 
+  virtual void setTransport(const int32_t tsp_id, TransportInterface *tsp) = 0;
+
 protected:
   int32_t id_; // global unique identification of a topic
   const char *name_;
@@ -62,10 +63,8 @@ struct TopicT : public TopicBase {
   using TransportManager = TTransportManager;
   using Msg = TMsg;
 
-  TopicT(const char *name) : TopicBase(name, type_id<TMsg>(), sizeof(TMsg)) {}
-
-  template <size_t Idx, typename Transport>
-  void setTransport(Transport *transport);
+  TopicT(const char *name, int32_t id)
+      : TopicBase(name, id, type_id<TMsg>(), sizeof(TMsg)) {}
 
   void write(const TMsg &msg);
 
@@ -76,18 +75,12 @@ struct TopicT : public TopicBase {
   // this should be non-blocking
   void recv(const int32_t tsp_id, const MsgBase *msg) override;
 
+  void setTransport(const int32_t tsp_id, TransportInterface *tsp) override;
+
 protected:
   TMsg msg_;
 
-  template <typename Transport> struct TransportInfo {
-    using type = Transport *;
-  };
-
-  using TransportTuple =
-      typename TransportManager::template ApplyTransports<TransportInfo,
-                                                          std::tuple>;
-
-  TransportTuple transports_{}; // init to nullptr
+  etl::array<TransportInterface *, TransportManager::size> transports_{};
 };
 
 struct TopicManager {
@@ -96,12 +89,19 @@ struct TopicManager {
     return inst;
   }
 
-  template <typename Topic> static Topic *FindOrAdd(const char *name) {
-    return Instance().findOrAdd<Topic>(name);
+  template <typename Topic>
+  static Topic *AddTopic(const char *name, int32_t id) {
+    return Instance().addTopic<Topic>(name, id);
+  }
+
+  template <typename Topic> static Topic *FindTopic(const char *name) {
+    return Instance().findTopic<Topic>(name);
   }
 
 protected:
-  template <typename Topic> Topic *findOrAdd(const char *name);
+  template <typename Topic> Topic *addTopic(const char *name, int32_t id);
+
+  template <typename Topic> Topic *findTopic(const char *name);
 
 protected:
   TopicManager() = default;
@@ -109,7 +109,7 @@ protected:
   TopicManager &operator=(const TopicManager &other) = delete;
 
 protected:
-  etl::vector<std::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_;
+  etl::array<std::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
 };
 
 } // namespace uros

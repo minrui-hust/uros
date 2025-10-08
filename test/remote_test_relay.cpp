@@ -3,30 +3,13 @@
 #include <chrono>
 
 #include "uros/uros.h"
+#include "uros/transport_local.h"
 #include "uros/transport_remote_socket.h"
 
 using namespace std::chrono_literals;
 
 // 使用 TransportLocal + 两个 TransportRemoteSocket：一个接收，一个转发
 using Uros = uros::System<uros::TransportLocal, uros::TransportRemoteSocket, uros::TransportRemoteSocket>;
-
-void uros_init() {
-  // Transport 0: TransportLocal
-  auto &transport_local = Uros::Transport<0>();
-  transport_local.declareTopic("/sensor_data", 0);
-  
-  // Transport 1: 从 Producer (10001) 接收数据，监听 10002
-  auto &transport_in = Uros::Transport<1>();
-  transport_in.initSocket("127.0.0.1", 10002, "127.0.0.1", 10001);
-  transport_in.declareTopic("/sensor_data", 0);
-  
-  // Transport 2: 转发数据到 Consumer (10004)，监听 10003
-  auto &transport_out = Uros::Transport<2>();
-  transport_out.initSocket("127.0.0.1", 10003, "127.0.0.1", 10004);
-  transport_out.declareTopic("/sensor_data", 0);  // 同一个 topic！
-  
-  Uros::Init();
-}
 
 // 传感器数据消息
 struct SensorData : uros::MsgBase {
@@ -35,6 +18,27 @@ struct SensorData : uros::MsgBase {
   float temperature;
   float humidity;
 };
+
+void uros_init() {
+  // 注册 topic
+  Uros::RegisterTopic<SensorData>("/sensor_data", 0);
+  
+  // Transport 0: TransportLocal
+  auto &transport_local = Uros::Transport<0>();
+  transport_local.declareTopic("/sensor_data");
+  
+  // Transport 1: 从 Producer (10001) 接收数据，监听 10002
+  auto &transport_in = Uros::Transport<1>();
+  transport_in.initSocket("127.0.0.1", 10002, "127.0.0.1", 10001);
+  transport_in.declareTopic("/sensor_data");
+  
+  // Transport 2: 转发数据到 Consumer (10004)，监听 10003
+  auto &transport_out = Uros::Transport<2>();
+  transport_out.initSocket("127.0.0.1", 10003, "127.0.0.1", 10004);
+  transport_out.declareTopic("/sensor_data");  // 同一个 topic！
+  
+  Uros::Init();
+}
 
 int main() {
   std::cout << "=== Data Relay (Port 10002 <- Producer, Port 10003 -> Consumer) ===" << std::endl;
