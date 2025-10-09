@@ -15,7 +15,7 @@ struct TransportRemote : public TransportBase<Derived> {
 
   using Base::derived;
   using Base::id_;
-  using Base::topic_metas_;
+  using Base::topics_;
 
   void initImpl() {
     send_worker_ = std::make_unique<Thread>(
@@ -58,13 +58,12 @@ protected:
     while (true) {
       auto len = recv(recv_buf_.data, sizeof(recv_buf_)); // block recv
       auto topic_id = recv_buf_.msg.topic_id;
-      if (topic_id >= topic_metas_.size() ||
-          topic_metas_[topic_id].topic == nullptr ||
-          topic_metas_[topic_id].topic->msgSize() != len) {
+      if (topic_id >= topics_.size() || topics_[topic_id] == nullptr ||
+          topics_[topic_id]->msgSize() != len) {
         continue;
       }
       // topic's recv should be non-blocking
-      topic_metas_[topic_id].topic->recv(id_, &recv_buf_.msg);
+      topics_[topic_id]->recv(id_, &recv_buf_.msg);
     }
   }
 

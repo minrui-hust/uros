@@ -38,9 +38,11 @@ protected:
   Derived &derived() { return static_cast<Derived &>(*this); }
   const Derived &derived() const { return static_cast<const Derived &>(*this); }
 
+  void initImpl() {} // default version doing nothing
+
 protected:
   int32_t id_ = -1; // unique id of transport, used for msg routing
-  etl::array<TopicMeta, UROS_MAX_TOPICS> topic_metas_;
+  etl::array<TopicBase *, UROS_MAX_TOPICS> topics_;
 };
 
 template <typename... TTransports> struct TransportManagerT {
@@ -65,10 +67,18 @@ template <typename... TTransports> struct TransportManagerT {
     return Instance().template transport<Idx>();
   }
 
+  template <typename TTransport> static auto &Transport() {
+    return Instance().template transport<TTransport>();
+  }
+
   static auto &Transports() { return Instance().transports(); }
 
 protected:
   template <size_t Idx> auto &transport() { return std::get<Idx>(transports_); }
+
+  template <typename TTransport> auto &transport() {
+    return std::get<TTransport>(transports_);
+  }
 
   auto &transports() { return transports_; }
 

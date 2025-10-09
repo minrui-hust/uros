@@ -1,8 +1,7 @@
 #include <iostream>
 #include <thread>
 
-#include "uros/uros.h"
-
+#include "uros/system.h"
 #include "uros/transport_local.h"
 #include "uros/transport_remote_socket.h"
 
@@ -10,11 +9,11 @@ using namespace std::chrono_literals;
 
 using Uros = uros::System<uros::TransportLocal, uros::TransportRemoteSocket>;
 
-struct MessageHello : uros::MsgBase {
+struct MessageHello : Uros::Message {
   int32_t seq;
 };
 
-struct MessageResponse : uros::MsgBase {
+struct MessageResponse : Uros::Message {
   int32_t seq;
 };
 

@@ -27,10 +27,17 @@ template <typename... Transports> struct System {
     return topic != nullptr;
   }
 
-  static void Init() { TransportManager::Init(); }
-
   template <size_t Idx> static auto &Transport() {
     return TransportManager::template Transport<Idx>();
+  }
+
+  template <typename TTransport> static auto &Transport() {
+    return TransportManager::template Transport<TTransport>();
+  }
+
+  static void Init() {
+    TransportManager::Init();
+    // TODO: maybe init others
   }
 };
 

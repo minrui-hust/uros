@@ -6,8 +6,6 @@
 namespace uros {
 
 struct TransportLocal : public TransportBase<TransportLocal> {
-  void initImpl() {}
-
   template <typename Topic>
   void writeImpl(Topic *topic, const typename Topic::Msg &msg) {
     topic->update(msg);

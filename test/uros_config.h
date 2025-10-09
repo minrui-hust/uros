@@ -1,5 +1,8 @@
 #pragma once
 
+#define PLATFORM_LINUX
+// #define PLATFORM_FREERTOS
+
 #define UROS_MAX_TRANSPORT 4
 
 #define UROS_MAX_TOPICS 32
@@ -17,5 +20,3 @@
 #define UROS_TRANSPORT_WORKER_PRIORITY 3 // almost lowest
 
 // #define UROS_VERBOSE
-
-#define PLATFORM_LINUX
