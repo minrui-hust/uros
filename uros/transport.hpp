@@ -13,7 +13,7 @@ bool TransportBase<Derived>::declareTopic(const char *topic_name) {
   }
 
   auto topic_id = topic->id();
-  if (topic_id >= topic_metas_.size()) {
+  if ((size_t)topic_id >= topic_metas_.size()) {
     return false;
   }
 
@@ -22,7 +22,7 @@ bool TransportBase<Derived>::declareTopic(const char *topic_name) {
 
   topic->setTransport(id_, this);
 
-  UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
+  // UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
   return true;
 }
@@ -31,7 +31,8 @@ template <typename... TTransports>
 TransportManagerT<TTransports...>::TransportManagerT() {
   [&]<std::size_t... Is>(std::index_sequence<Is...>) {
     (([&]() { transport<Is>().id() = Is; }()), ...);
-  }(std::make_index_sequence<size>{});
+  }
+  (std::make_index_sequence<size>{});
 }
 
 template <typename... TTransports>

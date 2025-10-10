@@ -9,8 +9,8 @@ template <typename TransportManager, typename TMsg> struct TopicT;
 struct SubscriptionBase {
   SubscriptionBase(EventGroup *evt, int32_t idx)
       : evt_(evt), bit_mask_(1 << idx) {
-    UROS_ASSERT(evt);
-    UROS_ASSERT(idx < 24); // only 24 bits for event
+    CHECK(evt);
+    CHECK(idx < 24); // only 24 bits for event
   }
 
   const EventBits &bitMask() const { return bit_mask_; }

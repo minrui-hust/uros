@@ -22,12 +22,12 @@ NodeT<TransportManager>::createSubscription(
 
   auto topic = TopicManager::FindTopic<Topic>(topic_name);
   if (!topic) {
-    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
+    // UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
     return nullptr;
   }
 
   auto sub = std::make_unique<Subscription>(&evt_, subs_.size());
-  UROS_ASSERT(sub);
+  CHECK(sub);
 
   sub->subscribe(topic, cb);
 
@@ -53,12 +53,12 @@ NodeT<TransportManager>::createPublisher(const char *topic_name) {
 
   auto topic = TopicManager::FindTopic<Topic>(topic_name);
   if (!topic) {
-    UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
+    // UROS_PRINT("Failed to find topic: '%s'\n", topic_name);
     return nullptr;
   }
 
   auto pub = std::make_unique<Publisher>();
-  UROS_ASSERT(pub);
+  CHECK(pub);
 
   pub->advertise(topic);
 

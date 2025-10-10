@@ -21,12 +21,12 @@ struct TransportRemote : public TransportBase<Derived> {
     send_worker_ = std::make_unique<Thread>(
         "transport_send_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
         UROS_TRANSPORT_WORKER_PRIORITY, [&]() { sendWork(); });
-    UROS_ASSERT(send_worker_);
+    CHECK(send_worker_);
 
     recv_worker_ = std::make_unique<Thread>(
         "transport_recv_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
         UROS_TRANSPORT_WORKER_PRIORITY, [&]() { recvWork(); });
-    UROS_ASSERT(recv_worker_);
+    CHECK(recv_worker_);
   }
 
   template <typename Topic>

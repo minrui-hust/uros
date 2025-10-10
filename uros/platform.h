@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kernel.h"
+
 #include "uros_config.h"
 
 #ifdef PLATFORM_LINUX
