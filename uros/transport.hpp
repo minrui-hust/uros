@@ -13,15 +13,14 @@ bool TransportBase<Derived>::declareTopic(const char *topic_name) {
   }
 
   auto topic_id = topic->id();
-  if (topic_id >= topics_.size()) {
-    UROS_PRINT("invalide topic id: %d\n", topic_id);
+  if ((size_t)topic_id >= topics_.size()) {
     return false;
   }
 
   topics_[topic_id] = topic;
   topic->setTransport(id_, this);
 
-  UROS_PRINT("add topic '%s' to transport %d succeed\n", topic->name(), id_);
+  // UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
   return true;
 }

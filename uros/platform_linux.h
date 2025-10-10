@@ -18,7 +18,6 @@
 #endif
 
 namespace uros {
-using type_id_t = uint64_t;
 
 // EventBits 定义
 using EventBits = uint32_t;

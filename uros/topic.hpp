@@ -11,8 +11,6 @@ namespace uros {
 
 template <typename TransportManager, typename TMsg>
 void TopicT<TransportManager, TMsg>::write(const TMsg &msg) {
-  UROS_PRINT("Write message to topic '%s'\n", name());
-
   // iterate on all transport
   [&]<std::size_t... Is>(std::index_sequence<Is...>) {
     (([&]() {
@@ -24,7 +22,8 @@ void TopicT<TransportManager, TMsg>::write(const TMsg &msg) {
        }
      }()),
      ...);
-  }(std::make_index_sequence<TransportManager::size>{});
+  }
+  (std::make_index_sequence<TransportManager::size>{});
 }
 
 template <typename TransportManager, typename TMsg>
@@ -69,23 +68,21 @@ void TopicT<TransportManager, TMsg>::recv(const int32_t tsp_id,
        }
      }()),
      ...);
-  }(std::make_index_sequence<TransportManager::size>{});
+  }
+  (std::make_index_sequence<TransportManager::size>{});
 }
 
 template <typename TransportManager, typename TMsg>
 void TopicT<TransportManager, TMsg>::setTransport(const int32_t tsp_id,
                                                   TransportInterface *tsp) {
-  if (tsp_id < transports_.size()) {
+  if ((size_t)tsp_id < transports_.size()) {
     transports_[tsp_id] = tsp;
   }
 }
 
 template <typename Topic>
 Topic *TopicManager::addTopic(const char *name, int32_t id) {
-  using TransportManager = typename Topic::TransportManager;
-  using Msg = typename Topic::Msg;
-
-  if (id >= topics_.size()) {
+  if ((size_t)id >= topics_.size()) {
     return nullptr;
   }
 
@@ -99,7 +96,7 @@ Topic *TopicManager::addTopic(const char *name, int32_t id) {
   }
 
   topic = std::make_unique<Topic>(name, id);
-  UROS_ASSERT(topic);
+  CHECK(topic);
 
   return static_cast<Topic *>(topic.get());
 }
@@ -115,7 +112,7 @@ template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
         if (tp->msgType() == type_id<typename Topic::Msg>()) {
           return static_cast<Topic *>(tp.get());
         } else {
-          UROS_PRINT("topic found but msg type mismatch\n");
+          // UROS_PRINT("topic found but msg type mismatch\n");
           return nullptr; // topic exist but type mismatch
         }
       }

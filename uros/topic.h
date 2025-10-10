@@ -14,7 +14,7 @@ namespace uros {
 
 struct TopicBase {
   TopicBase(const char *name, int32_t id, type_id_t msg_type, size_t msg_size)
-      : name_(name), id_(id), msg_type_(msg_type), msg_size_(msg_size) {}
+      : id_(id), name_(name), msg_type_(msg_type), msg_size_(msg_size) {}
 
   const int32_t &id() const { return id_; }
 
