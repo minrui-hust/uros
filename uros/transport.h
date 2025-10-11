@@ -17,11 +17,16 @@ struct TopicMeta {
   TopicBase *topic = nullptr;
 };
 
+struct ServiceMeta {};
+
 struct TransportInterface {};
 
 template <typename Derived> struct TransportBase : public TransportInterface {
 
   bool declareTopic(const char *topic_name);
+
+  int32_t &id() { return id_; }
+  const int32_t &id() const { return id_; }
 
   void init() { derived().initImpl(); }
 
@@ -31,8 +36,12 @@ template <typename Derived> struct TransportBase : public TransportInterface {
     derived().writeImpl(topic, msg);
   }
 
-  int32_t &id() { return id_; }
-  const int32_t &id() const { return id_; }
+  // send service request to transport
+  template <typename Service>
+  bool sendRequest(Service *service, const typename Service::Req &req,
+                   int timeout_ms) {
+    derived().sendRequestImpl(service, req, timeout_ms);
+  }
 
 protected:
   Derived &derived() { return static_cast<Derived &>(*this); }
@@ -43,6 +52,7 @@ protected:
 protected:
   int32_t id_ = -1; // unique id of transport, used for msg routing
   etl::array<TopicBase *, UROS_MAX_TOPICS> topics_;
+  etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_;
 };
 
 template <typename... TTransports> struct TransportManagerT {

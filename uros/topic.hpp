@@ -102,7 +102,6 @@ Topic *TopicManager::addTopic(const char *name, int32_t id) {
 }
 
 template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
-  // find first
   for (auto i = 0u; i < topics_.size(); ++i) {
     auto &tp = topics_[i];
     if (tp != nullptr && strcmp(tp->name(), name) == 0) {
@@ -112,7 +111,7 @@ template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
         if (tp->msgType() == type_id<typename Topic::Msg>()) {
           return static_cast<Topic *>(tp.get());
         } else {
-          // UROS_PRINT("topic found but msg type mismatch\n");
+          UROS_PRINT("topic found but msg type mismatch\n");
           return nullptr; // topic exist but type mismatch
         }
       }

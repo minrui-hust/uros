@@ -7,20 +7,15 @@ namespace uros {
 template <typename TransportManager, typename TReq, typename TRsp>
 struct ServiceT;
 
-struct ServerBase : SubscriptionBase {
-  ServerBase(EventGroup *evt, int32_t idx) : SubscriptionBase(evt, idx) {}
-};
+struct ClientBase {};
 
 template <typename TransportManager, typename TReq, typename TRsp>
-struct ServerT : ServerBase {
+struct ClientT : ClientBase {
   using Service = ServiceT<TransportManager, TReq, TRsp>;
 
-  ServerT(EventGroup *evt, int idx) : ServerBase(evt, idx) {}
+  void connect(Service *service);
 
-  bool serve(Service *service,
-             const std::function<void(const TReq &, TRsp &)> &cb);
-
-  void spinOnce() override;
+  bool call(const TReq &req, TRsp &rsp, int timeout_ms);
 
 protected:
   Service *service_;

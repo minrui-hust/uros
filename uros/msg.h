@@ -9,4 +9,8 @@ struct MsgBase {
   mutable int32_t topic_id; // for internal usage only
 };
 
+struct ReqBase {};
+
+struct RspBase {};
+
 } // namespace uros

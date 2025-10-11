@@ -10,6 +10,12 @@ struct TransportLocal : public TransportBase<TransportLocal> {
   void writeImpl(Topic *topic, const typename Topic::Msg &msg) {
     topic->update(msg);
   }
+
+  template <typename Service>
+  bool sendRequestImpl(Service *service, const typename Service::Req &req,
+                       int timeout_ms) {
+    return service->emitRequest(req, timeout_ms);
+  }
 };
 
 } // namespace uros

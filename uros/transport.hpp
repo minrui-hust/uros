@@ -20,7 +20,7 @@ bool TransportBase<Derived>::declareTopic(const char *topic_name) {
   topics_[topic_id] = topic;
   topic->setTransport(id_, this);
 
-  // UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
+  UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
   return true;
 }
