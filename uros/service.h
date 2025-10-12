@@ -71,18 +71,29 @@ struct ServiceT : public ServiceBase {
       : ServiceBase(name, id, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
                     sizeof(TRsp)) {}
 
-  // used by client
+  // request related
+
+  // put request is called by client
   void sendRequest(const TReq &req);
-  bool waitResponse(TRsp &rsp, int timeout_ms);
 
-  // use by server
-  bool fetchRequest(TReq &req);
-  void putResponse(const TRsp &rsp);
-
-  // used by transport
+  // emit request is called by TransportLocal
   bool emitRequest(const TReq &req, int timeout_ms);
 
+  // fetch is called by registered server
+  bool fetchRequest(TReq &req);
+
+  // route is called by TransportRemote
   void routeRequest(const int tsp_id, const ReqBase *req) override;
+
+  // response related
+
+  // called by server to send back response after process request
+  void sendResponse(const TRsp &rsp);
+
+  // called by TransportLocal to emit response to client
+  bool emitResponse(TRsp &rsp, int timeout_ms);
+
+  // called by TransportRemote to route reponse
   void routeResponse(const int tsp_id, const RspBase *rsp) override;
 
 protected:

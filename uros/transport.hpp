@@ -25,12 +25,20 @@ bool TransportBase<Derived>::declareTopic(const char *topic_name) {
   return true;
 }
 
+template <typename Derived>
+int TransportBase<Derived>::getRouteDistance(int service_id) {
+  // TODO: lock
+  if (service_id >= service_metas_.size()) {
+    return -1;
+  }
+  return service_metas_[service_id].dist;
+}
+
 template <typename... TTransports>
 TransportManagerT<TTransports...>::TransportManagerT() {
   [&]<std::size_t... Is>(std::index_sequence<Is...>) {
     (([&]() { transport<Is>().id() = Is; }()), ...);
-  }
-  (std::make_index_sequence<size>{});
+  }(std::make_index_sequence<size>{});
 }
 
 template <typename... TTransports>

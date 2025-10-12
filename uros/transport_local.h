@@ -13,8 +13,13 @@ struct TransportLocal : public TransportBase<TransportLocal> {
 
   template <typename Service>
   bool sendRequestImpl(Service *service, const typename Service::Req &req,
-                       int timeout_ms) {
-    return service->emitRequest(req, timeout_ms);
+                       int tsp, int timeout_ms) {
+    return service->emitRequest(req, tsp, timeout_ms);
+  }
+
+  template <typename Service>
+  bool sendResponseImpl(Service *service, const typename Service::Rsp &rsp) {
+    return service->emitResponse(rsp);
   }
 };
 

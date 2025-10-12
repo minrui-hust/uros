@@ -12,6 +12,7 @@ void PublisherT<TransportManager, TMsg>::advertise(
 
 template <typename TransportManager, typename TMsg>
 void PublisherT<TransportManager, TMsg>::publish(const TMsg &msg) {
+  // TODO: __id__
   topic_->write(msg);
 }
 

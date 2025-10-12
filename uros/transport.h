@@ -17,7 +17,15 @@ struct TopicMeta {
   TopicBase *topic = nullptr;
 };
 
-struct ServiceMeta {};
+struct RequestInfo {
+  int tsp_in;            // which transport this request come from
+  uint32_t req_id;       // unique global identifier of an request
+  int64_t deadline = -1; // after deadline, request is treat as invalid
+};
+
+struct ServiceMeta {
+  int dist = -1;
+};
 
 struct TransportInterface {};
 
@@ -30,17 +38,25 @@ template <typename Derived> struct TransportBase : public TransportInterface {
 
   void init() { derived().initImpl(); }
 
-  // write to transport should be non-blocking
+  // nonblocking!
   template <typename Topic>
   void write(Topic *topic, const typename Topic::Msg &msg) {
     derived().writeImpl(topic, msg);
   }
 
+  int getRouteDistance(int service_id);
+
   // send service request to transport
   template <typename Service>
-  bool sendRequest(Service *service, const typename Service::Req &req,
+  bool sendRequest(Service *service, const typename Service::Req &req, int tsp,
                    int timeout_ms) {
-    derived().sendRequestImpl(service, req, timeout_ms);
+    derived().sendRequestImpl(service, req, tsp, timeout_ms);
+  }
+
+  // nonblocking!, send service response to transport
+  template <typename Service>
+  bool sendResponse(Service *service, const typename Service::Rsp &rsp) {
+    derived().sendResponseImpl(service, rsp);
   }
 
 protected:
@@ -53,6 +69,7 @@ protected:
   int32_t id_ = -1; // unique id of transport, used for msg routing
   etl::array<TopicBase *, UROS_MAX_TOPICS> topics_;
   etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_;
+  etl::array<RequestInfo, UROS_TRANSPORT_MAX_REQS> req_infos_;
 };
 
 template <typename... TTransports> struct TransportManagerT {
