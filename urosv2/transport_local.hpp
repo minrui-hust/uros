@@ -4,7 +4,8 @@
 
 namespace uros {
 
-inline bool TransportLocal::put(MsgBase *msg, int from_tsp, int timeout_ms) {
+inline bool TransportLocal::put(const MsgBase *msg, int from_tsp,
+                                int timeout_ms) {
   if (msg->__id__.type == MsgTypeNormal) {
     return putNormal(msg, from_tsp, timeout_ms);
   } else if (msg->__id__.type == MsgTypeRequest) {
@@ -16,12 +17,12 @@ inline bool TransportLocal::put(MsgBase *msg, int from_tsp, int timeout_ms) {
   } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
     return putServiceDiscovery(msg, from_tsp, timeout_ms);
   } else {
-    UROS_PRINT("Unknow msg type: %d\n", msg_->__id__.type);
+    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
     return false;
   }
 }
 
-inline bool TransportLocal::putNormal(MsgBase *msg, int from_tsp,
+inline bool TransportLocal::putNormal(const MsgBase *msg, int from_tsp,
                                       int timeout_ms) {
   auto topic_id = msg->__id__.entry;
   if (topic_id >= topic_metas_.size()) {
@@ -38,23 +39,23 @@ inline bool TransportLocal::putNormal(MsgBase *msg, int from_tsp,
   return true;
 }
 
-inline bool TransportLocal::putRequest(MsgBase *msg, int from_tsp,
+inline bool TransportLocal::putRequest(const MsgBase *msg, int from_tsp,
                                        int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putResponse(MsgBase *msg, int from_tsp,
+inline bool TransportLocal::putResponse(const MsgBase *msg, int from_tsp,
                                         int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putServiceBroadcast(MsgBase *msg, int from_tsp,
-                                                int timeout_ms) {
+inline bool TransportLocal::putServiceBroadcast(const MsgBase *msg,
+                                                int from_tsp, int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putServiceDiscovery(MsgBase *msg, int from_tsp,
-                                                int timeout_ms) {
+inline bool TransportLocal::putServiceDiscovery(const MsgBase *msg,
+                                                int from_tsp, int timeout_ms) {
   return false; // TODO
 }
 

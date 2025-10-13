@@ -1,44 +1,34 @@
 #include <iostream>
 #include <thread>
 
-#include "uros/system.h"
-#include "uros/transport_local.h"
-#include "uros/transport_remote_socket.h"
+#include "urosv2/uros.h"
 
 using namespace std::chrono_literals;
 
-using Uros = uros::System<uros::TransportLocal, uros::TransportRemoteSocket>;
-
-struct MessageHello : Uros::Message {
+struct MessageHello : uros::MsgBase {
   int32_t seq;
 };
 
-struct MessageResponse : Uros::Message {
+struct MessageResponse : uros::MsgBase {
   int32_t seq;
 };
 
 void uros_init() {
-  Uros::RegisterTopic<MessageHello>("/hello", 0);
-  Uros::RegisterTopic<MessageResponse>("/hello_response", 1);
+  uros::RegisterTopic<MessageHello>("/hello", 0);
+  uros::RegisterTopic<MessageResponse>("/hello_response", 1);
 
   // config each transport
-  auto &transport_local = Uros::Transport<0>();
+  auto &transport_local = uros::Transport<0>();
   transport_local.declareTopic("/hello");
   transport_local.declareTopic("/hello_response");
 
-  auto &transport_udp = Uros::Transport<1>();
-  transport_udp.initSocket("127.0.0.1", 10000, "127.0.0.1", 10001);
-
-  transport_udp.declareTopic("/hello");
-  transport_udp.declareTopic("/hello_response");
-
-  Uros::Init();
+  uros::Init();
 }
 
 int main() {
   uros_init();
 
-  Uros::Node node_talker;
+  uros::Node node_talker;
   auto talker_pub = node_talker.createPublisher<MessageHello>("/hello");
   assert(talker_pub);
 
@@ -47,7 +37,7 @@ int main() {
         std::cout << "receive 'Response': " << msg.seq << std::endl;
       });
 
-  Uros::Node node_listener;
+  uros::Node node_listener;
   auto listener_pub =
       node_listener.createPublisher<MessageResponse>("/hello_response");
   assert(listener_pub);
@@ -70,6 +60,8 @@ int main() {
     std::cout << "listener_thread started" << std::endl;
     node_listener.spin();
   });
+
+  msleep(1000);
 
   MessageHello hello = {.seq = 0};
   while (true) {

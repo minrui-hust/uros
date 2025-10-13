@@ -4,11 +4,18 @@ namespace uros {
 
 template <typename TMsg> struct TopicT;
 
-struct PublisherBase {};
+struct PublisherBase {
+  PublisherBase(int id) : id_(id) {}
+
+protected:
+  int id_;
+};
 
 template <typename TMsg> struct PublisherT : public PublisherBase {
   using Topic = TopicT<TMsg>;
   using Msg = TMsg;
+
+  PublisherT(int id) : PublisherBase(id) {}
 
   void advertise(Topic *topic);
 

@@ -9,18 +9,23 @@ template <typename TMsg> struct TopicT;
 struct SubscriptionBase {
   SubscriptionBase(int id) : id_(id) {}
 
-  EventBits &bitMask() { return bit_mask_; }
-  const EventBits &bitMask() const { return bit_mask_; }
-
-  void notify() {
-    // TODO
+  void setupEvent(EventGroup *evt, int bit_idx) {
+    CHECK(evt)
+    CHECK(bit_idx < 24);
+    evt_ = evt;
+    bit_mask_ = 1 << bit_idx;
   }
+
+  const auto &bitMask() const { return bit_mask_; }
+
+  void notify() { evt_->set(bit_mask_); }
 
   virtual void spinOnce() = 0;
 
 protected:
-  int id_; // TODO
-  EventBits bit_mask_;
+  int id_; // index in topic
+  EventGroup *evt_ = nullptr;
+  EventBits bit_mask_ = 0;
   int generation_ = -1;
 };
 

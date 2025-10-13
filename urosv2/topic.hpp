@@ -33,6 +33,7 @@ template <typename Msg> PublisherT<Msg> *TopicT<Msg>::addPublisher() {
 }
 
 template <typename TMsg> void TopicT<TMsg>::write(const TMsg &msg) {
+  msg.__id__.entry = id_;
   TRANSPORTS_MANAGER::Transport<TransportLocal>().sendMsg(this, msg);
 }
 
@@ -62,7 +63,7 @@ template <typename TMsg> void TopicT<TMsg>::update(const TMsg &msg) {
 }
 
 template <typename TMsg> void TopicT<TMsg>::recv(const MsgBase *msg) {
-  update(*static_cast<TMsg *>(msg));
+  update(*static_cast<const TMsg *>(msg));
 }
 
 template <typename Topic>
@@ -76,13 +77,15 @@ Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
   auto &topic = topics_[id];
   if (topic) {
     if (topic->id() == id && strcmp(topic->name(), name) == 0) {
+      UROS_PRINT("topic '%s' already added with same type\n", name);
       return static_cast<Topic *>(topic.get());
     } else {
+      UROS_PRINT("topic '%s' already added with different type\n", name);
       return nullptr;
     }
   }
 
-  topic = std::make_unique<Topic>(name, id);
+  topic = etl::unique_ptr(new Topic(name, id, prio));
   CHECK(topic);
 
   return static_cast<Topic *>(topic.get());
@@ -91,7 +94,7 @@ Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
 template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
   for (auto i = 0u; i < topics_.size(); ++i) {
     auto &tp = topics_[i];
-    if (tp != nullptr && strcmp(tp->name(), name) == 0) {
+    if (tp.get() != nullptr && strcmp(tp->name(), name) == 0) {
       if constexpr (std::is_same_v<Topic, TopicBase>) {
         return tp.get();
       } else {

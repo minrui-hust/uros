@@ -31,7 +31,7 @@ Node::createSubscription(const char *topic_name,
   CHECK(sub);
 
   // set notification bit mask
-  sub->bitMask() = (1 << subs_.size());
+  sub->setupEvent(&evt_, subs_.size());
   wait_set_ |= sub->bitMask();
 
   return static_cast<Subscription *>(subs_.emplace_back(sub));
@@ -108,15 +108,14 @@ Node::createServer(const char *service_name,
   return static_cast<Server *>(subs_.emplace_back(srv));
 }
 
-void Node::spin() {
+inline void Node::spin() {
   while (true) {
-    spinOnce(-1);
+    spinOnce();
   }
 }
 
-void Node::spinOnce(int32_t timeout_ms) {
-  // TODO
-  // auto flags = evt_.wait(wait_set_, true, false, timeout_ms);
+inline void Node::spinOnce(int timeout_ms) {
+  auto flags = evt_.wait(wait_set_, true, false, timeout_ms);
 
   // new event may set when program reach here, the new topic data will
   // processed by the logic below,but event bit is not cleared, so wait will
@@ -124,19 +123,12 @@ void Node::spinOnce(int32_t timeout_ms) {
   // redundant data. in case of this situation, generation should be checked
   // in spinOnce
 
-  // process subscriptions
-  // for (auto i = 0u; i < subs_.size(); ++i) {
-  //   if (flags & (1 << i)) {
-  //     subs_[i]->spinOnce();
-  //   }
-  // }
-
-  // TODO: process servers
-  // for (auto i = 0u; i < srvs_.size(); ++i) {
-  //   if (flags & (1 << (i + 16))) {
-  //     srvs_[i]->spinOnce();
-  //   }
-  // }
+  // process subscriptions (and servers)
+  for (auto i = 0u; i < subs_.size(); ++i) {
+    if (flags & (1 << i)) {
+      subs_[i]->spinOnce();
+    }
+  }
 }
 
 } // namespace uros

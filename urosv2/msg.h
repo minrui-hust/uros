@@ -21,7 +21,7 @@ struct __attribute__((packed)) MsgId {
   uint8_t seq : 4;     // always inc seq
 };
 
-struct __attribute__((packed)) MsgBase {
+struct MsgBase {
   mutable MsgId __id__; // for internal usage only
 };
 

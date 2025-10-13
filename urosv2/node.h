@@ -47,7 +47,8 @@ struct Node {
   ClientT<TReq, TRsp> *createClient(const char *service_name);
 
   void spin();
-  void spinOnce(int32_t timeout_ms = -1);
+
+  void spinOnce(int timeout_ms = -1);
 
 protected:
   // contain both subsciption and server
@@ -55,6 +56,7 @@ protected:
   etl::vector<PublisherBase *, UROS_NODE_MAX_PUBS> pubs_;
   etl::vector<ClientBase *, UROS_NODE_MAX_CLIS> clis_;
 
+  EventGroup evt_;
   uint32_t wait_set_ = 0;
 };
 

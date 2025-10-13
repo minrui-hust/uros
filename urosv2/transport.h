@@ -43,10 +43,12 @@ struct TransportBase {
     return *this;
   }
 
+  const auto &id() const { return id_; }
+
   virtual void init() {}
 
   // put low level message on transport
-  virtual bool put(MsgBase *msg, int from_tsp, int timeout_ms) = 0;
+  virtual bool put(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
 
 protected:
   int32_t id_ = -1;
@@ -58,18 +60,22 @@ protected:
 struct Router {
   void addTransport(TransportBase *tsp);
 
-  bool route(MsgBase *msg, int from_tsp, int to_tsp = -1, int timeout_ms = 0);
+  bool route(const MsgBase *msg, int from_tsp, int to_tsp = -1,
+             int timeout_ms = 0);
 
 protected:
-  bool routeNormal(MsgBase *msg, int from_tsp, int to_tsp, int timeout_ms);
-  bool routeRequest(MsgBase *msg, int from_tsp, int to_tsp, int timeout_ms);
-  bool routeResponse(MsgBase *msg, int from_tsp, int to_tsp, int timeout_ms);
-  bool routeServiceBroadcast(MsgBase *msg, int from_tsp, int to_tsp,
+  bool routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
+                   int timeout_ms);
+  bool routeRequest(const MsgBase *msg, int from_tsp, int to_tsp,
+                    int timeout_ms);
+  bool routeResponse(const MsgBase *msg, int from_tsp, int to_tsp,
+                     int timeout_ms);
+  bool routeServiceBroadcast(const MsgBase *msg, int from_tsp, int to_tsp,
                              int timeout_ms);
-  bool routeServiceDiscovery(MsgBase *msg, int from_tsp, int to_tsp,
+  bool routeServiceDiscovery(const MsgBase *msg, int from_tsp, int to_tsp,
                              int timeout_ms);
 
-  bool broadcast(MsgBase *msg, int from_tsp, int timeout_ms);
+  bool broadcast(const MsgBase *msg, int from_tsp, int timeout_ms);
 
 protected:
   etl::vector<TransportBase *, UROS_MAX_TRANSPORT> transports_;

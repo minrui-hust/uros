@@ -29,7 +29,7 @@ inline void Router::addTransport(TransportBase *tsp) {
   transports_.emplace_back(tsp);
 }
 
-inline bool Router::route(MsgBase *msg, int from_tsp, int to_tsp,
+inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
                           int timeout_ms) {
   if (msg->__id__.type == MsgTypeNormal) {
     return routeNormal(msg, from_tsp, to_tsp, timeout_ms);
@@ -42,12 +42,12 @@ inline bool Router::route(MsgBase *msg, int from_tsp, int to_tsp,
   } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
     return routeServiceDiscovery(msg, from_tsp, to_tsp, timeout_ms);
   } else {
-    UROS_PRINT("Unknow msg type: %d\n", msg_->__id__.type);
+    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
     return false;
   }
 }
 
-inline bool Router::routeNormal(MsgBase *msg, int from_tsp, int to_tsp,
+inline bool Router::routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
                                 int timeout_ms) {
   if (to_tsp >= 0 && to_tsp < transports_.size()) {
     return transports_[to_tsp]->put(msg, from_tsp, timeout_ms);
@@ -59,24 +59,34 @@ inline bool Router::routeNormal(MsgBase *msg, int from_tsp, int to_tsp,
   }
 }
 
-inline bool Router::routeRequest(MsgBase *msg, int from_tsp, int to_tsp,
+inline bool Router::routeRequest(const MsgBase *msg, int from_tsp, int to_tsp,
                                  int timeout_ms) {
   return false; // TODO
 }
 
-inline bool Router::routeResponse(MsgBase *msg, int from_tsp, int to_tsp,
+inline bool Router::routeResponse(const MsgBase *msg, int from_tsp, int to_tsp,
                                   int timeout_ms) {
   return false; // TODO
 }
 
-inline bool Router::routeServiceBroadcast(MsgBase *msg, int from_tsp,
+inline bool Router::routeServiceBroadcast(const MsgBase *msg, int from_tsp,
                                           int to_tsp, int timeout_ms) {
   return false; // TODO
 }
 
-inline bool Router::routeServiceDiscovery(MsgBase *msg, int from_tsp,
+inline bool Router::routeServiceDiscovery(const MsgBase *msg, int from_tsp,
                                           int to_tsp, int timeout_ms) {
   return false; // TODO
+}
+
+inline bool Router::broadcast(const MsgBase *msg, int from_tsp,
+                              int timeout_ms) {
+  for (auto &tsp : transports_) {
+    if (tsp->id() != from_tsp) {
+      tsp->put(msg, from_tsp, timeout_ms);
+    }
+  }
+  return true;
 }
 
 template <typename... TTransports>
@@ -88,8 +98,7 @@ TransportManagerT<TTransports...>::TransportManagerT() {
        router_.addTransport(&tsp);
      }()),
      ...);
-  }
-  (std::make_index_sequence<size>{});
+  }(std::make_index_sequence<size>{});
 }
 
 template <typename... TTransports>

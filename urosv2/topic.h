@@ -47,7 +47,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
   using Msg = TMsg;
 
   TopicT(const char *name, int id, int prio)
-      : TopicBase(name, id, type_id<TMsg>(), sizeof(TMsg)) {}
+      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
 
   SubscriptionT<Msg> *
   addSubscription(const std::function<void(const Msg &)> &cb);
@@ -94,7 +94,7 @@ protected:
   TopicManager &operator=(const TopicManager &other) = delete;
 
 protected:
-  etl::array<std::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
+  etl::array<etl::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
 };
 
 } // namespace uros

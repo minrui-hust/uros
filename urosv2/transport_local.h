@@ -7,7 +7,7 @@ namespace uros {
 
 struct TransportLocal : public TransportBase {
 
-  bool put(MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool put(const MsgBase *msg, int from_tsp, int timeout_ms) override;
 
   template <typename Topic>
   void sendMsg(Topic *topic, const typename Topic::Msg &msg);
@@ -19,11 +19,11 @@ struct TransportLocal : public TransportBase {
   void sendRsp(Service *service, const typename Service::Rsp &rsp);
 
 protected:
-  bool putNormal(MsgBase *msg, int from_tsp, int timeout_ms);
-  bool putRequest(MsgBase *msg, int from_tsp, int timeout_ms);
-  bool putResponse(MsgBase *msg, int from_tsp, int timeout_ms);
-  bool putServiceBroadcast(MsgBase *msg, int from_tsp, int timeout_ms);
-  bool putServiceDiscovery(MsgBase *msg, int from_tsp, int timeout_ms);
+  bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms);
+  bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms);
+  bool putResponse(const MsgBase *msg, int from_tsp, int timeout_ms);
+  bool putServiceBroadcast(const MsgBase *msg, int from_tsp, int timeout_ms);
+  bool putServiceDiscovery(const MsgBase *msg, int from_tsp, int timeout_ms);
 };
 
 } // namespace uros

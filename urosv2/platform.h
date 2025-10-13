@@ -3,7 +3,7 @@
 #include "uros_config.h"
 
 #ifdef UROS_VERBOSE
-#define UROS_PRINT(...) printf(...)
+#define UROS_PRINT(...) printf(__VA_ARGS__)
 #else
 #define UROS_PRINT(...)
 #endif
