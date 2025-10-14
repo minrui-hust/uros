@@ -15,8 +15,12 @@ struct TopicBase;
 struct Router;
 
 struct TopicMeta {
-  const char *name = "";
   TopicBase *topic = nullptr;
+
+  // simple ring buffer with depth 2
+  int wr = 0;
+  int rd = 0;
+  etl::unique_ptr<MsgBase> msgs[2];
 };
 
 struct ServiceMeta {
@@ -48,11 +52,22 @@ struct TransportBase {
   virtual void init() {}
 
   // put low level message on transport
-  virtual bool put(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
+  bool put(const MsgBase *msg, int from_tsp, int timeout_ms);
+
+protected:
+  virtual bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
+  virtual bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
+  virtual bool putResponse(const MsgBase *msg, int from_tsp,
+                           int timeout_ms) = 0;
+  virtual bool putServiceBroadcast(const MsgBase *msg, int from_tsp,
+                                   int timeout_ms) = 0;
+  virtual bool putServiceDiscovery(const MsgBase *msg, int from_tsp,
+                                   int timeout_ms) = 0;
 
 protected:
   int32_t id_ = -1;
   Router *router_ = nullptr;
+  uint32_t topic_bit_mask_ = 0;
   etl::array<TopicMeta, UROS_MAX_TOPICS> topic_metas_;       // TODO: init
   etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_; // TODO: init
 };
@@ -81,49 +96,39 @@ protected:
   etl::vector<TransportBase *, UROS_MAX_TRANSPORT> transports_;
 };
 
-template <typename... TTransports> struct TransportManagerT {
-  // Get the type of the Idx-th transport
-  template <size_t Idx>
-  using TransportType = std::tuple_element_t<Idx, std::tuple<TTransports...>>;
+struct TransportLocal;
 
-  static constexpr size_t size = sizeof...(TTransports);
+struct TransportManager {
+  template <typename Transport> static Transport *AddTransport() {
+    return Instance().addTransport<Transport>();
+  }
+
+  static TransportLocal *GetTransportLocal() {
+    return Instance().getTransportLocal();
+  }
 
   static void Init() { return Instance().init(); }
 
-  template <size_t Idx> static auto &Transport() {
-    return Instance().template transport<Idx>();
-  }
-
-  template <typename TTransport> static auto &Transport() {
-    return Instance().template transport<TTransport>();
-  }
-
-  static auto &Transports() { return Instance().transports(); }
-
 protected:
-  static TransportManagerT &Instance() {
-    static TransportManagerT inst;
+  static TransportManager &Instance() {
+    static TransportManager inst;
     return inst;
   }
 
-  template <size_t Idx> auto &transport() { return std::get<Idx>(transports_); }
+  template <typename Transport> Transport *addTransport();
 
-  template <typename TTransport> auto &transport() {
-    return std::get<TTransport>(transports_);
-  }
-
-  auto &transports() { return transports_; }
+  TransportLocal *getTransportLocal();
 
   void init();
 
 protected:
-  TransportManagerT();
-  TransportManagerT(const TransportManagerT &other) = delete;
-  TransportManagerT &operator=(const TransportManagerT &other) = delete;
+  TransportManager();
+  TransportManager(const TransportManager &other) = delete;
+  TransportManager &operator=(const TransportManager &other) = delete;
 
 protected:
   Router router_;
-  std::tuple<TTransports...> transports_;
+  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORT> transports_;
 };
 
 } // namespace uros

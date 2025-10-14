@@ -6,6 +6,7 @@
 #include "topic.hpp"
 #include "transport.hpp"
 #include "transport_local.hpp"
+#include "transport_remote.hpp"
 
 namespace uros {
 
@@ -15,16 +16,16 @@ static auto RegisterTopic(const char *topic_name, const uint8_t topic_id,
   return TopicManager::AddTopic<TopicT<Msg>>(topic_name, topic_id, topic_prio);
 }
 
-template <size_t Idx> static auto &Transport() {
-  return TRANSPORTS_MANAGER::template Transport<Idx>();
+template <typename Transport> static auto RegisterTransport() {
+  return TransportManager::AddTransport<Transport>();
 }
 
-template <typename T> static auto &Transport() {
-  return TRANSPORTS_MANAGER::template Transport<T>();
+static TransportLocal *GetTransportLocal() {
+  return TransportManager::GetTransportLocal();
 }
 
 static void Init() {
-  TRANSPORTS_MANAGER::Init();
+  TransportManager::Init();
   // TODO: maybe init others
 }
 

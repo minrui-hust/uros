@@ -141,8 +141,15 @@ struct Thread {
     (void)stack_size;
     (void)priority;
 
-    thread_ = std::thread(func);
+    thread_ = std::thread([this, func]() {
+      current_ = this;
+      func();
+    });
   }
+
+  auto &evt() { return evt_; }
+
+  static Thread *Current() { return current_; }
 
   ~Thread() {
     if (thread_.joinable()) {
@@ -156,6 +163,9 @@ struct Thread {
 
 protected:
   std::thread thread_;
+  EventGroup evt_;
+
+  static inline thread_local Thread *current_ = nullptr;
 };
 
 inline void msleep(int timeout_ms) {
@@ -163,6 +173,26 @@ inline void msleep(int timeout_ms) {
     timeout_ms = UINT32_MAX;
   }
   std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+}
+
+inline void ThreadNotify(Thread *t, uint32_t bits_to_notify) {
+  t->evt().set(bits_to_notify);
+}
+
+inline bool ThreadNotifyWait(const uint32_t &bits_clear_on_enter,
+                             const uint32_t &bits_clear_on_exit,
+                             uint32_t *bits_notified, int timeout_ms = -1) {
+  assert(bits_clear_on_enter == 0); // not supported
+
+  auto t = Thread::Current();
+  assert(t);
+
+  uint32_t flags = t->evt().wait(bits_clear_on_exit, true, false, timeout_ms);
+  if (bits_notified) {
+    *bits_notified = flags;
+  }
+
+  return flags != 0;
 }
 
 struct MessageBuffer {

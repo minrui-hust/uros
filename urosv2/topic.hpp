@@ -34,10 +34,10 @@ template <typename Msg> PublisherT<Msg> *TopicT<Msg>::addPublisher() {
 
 template <typename TMsg> void TopicT<TMsg>::write(const TMsg &msg) {
   msg.__id__.entry = id_;
-  TRANSPORTS_MANAGER::Transport<TransportLocal>().sendMsg(this, msg);
+  TransportManager::GetTransportLocal()->sendMsg(this, msg);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int32_t &gen) {
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
   LockGuard<CriticalLock> guard;
   if (generation_ <= gen) {
     return false;
@@ -47,11 +47,12 @@ template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int32_t &gen) {
   return true;
 }
 
-template <typename TMsg> void TopicT<TMsg>::update(const TMsg &msg) {
+template <typename TMsg> int TopicT<TMsg>::update(const TMsg &msg) {
+  int gen;
   { // update msg in critical section
     LockGuard<CriticalLock> guard;
     msg_ = msg;
-    ++generation_;
+    gen = ++generation_;
   }
 
   // notify subscriber to consume it
@@ -60,6 +61,13 @@ template <typename TMsg> void TopicT<TMsg>::update(const TMsg &msg) {
   for (auto i = 0u; i < subs_.size(); ++i) {
     subs_[i]->notify();
   }
+
+  return gen;
+}
+
+template <typename TMsg>
+etl::unique_ptr<MsgBase> TopicT<TMsg>::createMsg() const {
+  return etl::unique_ptr(new TMsg());
 }
 
 template <typename TMsg> void TopicT<TMsg>::recv(const MsgBase *msg) {

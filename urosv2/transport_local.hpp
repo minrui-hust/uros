@@ -4,26 +4,9 @@
 
 namespace uros {
 
-inline bool TransportLocal::put(const MsgBase *msg, int from_tsp,
-                                int timeout_ms) {
-  if (msg->__id__.type == MsgTypeNormal) {
-    return putNormal(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeRequest) {
-    return putRequest(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeResponse) {
-    return putResponse(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceBroadcast) {
-    return putServiceBroadcast(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
-    return putServiceDiscovery(msg, from_tsp, timeout_ms);
-  } else {
-    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
-    return false;
-  }
-}
-
 inline bool TransportLocal::putNormal(const MsgBase *msg, int from_tsp,
                                       int timeout_ms) {
+  // TODO: check for redundant
   auto topic_id = msg->__id__.entry;
   if (topic_id >= topic_metas_.size()) {
     return false;
@@ -61,7 +44,7 @@ inline bool TransportLocal::putServiceDiscovery(const MsgBase *msg,
 
 template <typename Topic>
 void TransportLocal::sendMsg(Topic *topic, const typename Topic::Msg &msg) {
-  topic->update(msg);
+  msg.__id__.seq = topic->update(msg);
   router_->route(&msg, id_, -1, 0); // broadcast without timeout
 }
 

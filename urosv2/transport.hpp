@@ -2,6 +2,7 @@
 
 #include "topic.h"
 #include "transport.h"
+#include "transport_local.h"
 
 namespace uros {
 
@@ -18,11 +19,32 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
 
   auto &topic_meta = topic_metas_[topic_id];
   topic_meta.topic = topic;
-  // TODO: more field
+  topic_meta.msgs[0] = topic->createMsg();
+  topic_meta.msgs[1] = topic->createMsg();
+
+  topic_bit_mask_ |= 1 << topic_id;
 
   UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
   return true;
+}
+
+inline bool TransportBase::put(const MsgBase *msg, int from_tsp,
+                               int timeout_ms) {
+  if (msg->__id__.type == MsgTypeNormal) {
+    return putNormal(msg, from_tsp, timeout_ms);
+  } else if (msg->__id__.type == MsgTypeRequest) {
+    return putRequest(msg, from_tsp, timeout_ms);
+  } else if (msg->__id__.type == MsgTypeResponse) {
+    return putResponse(msg, from_tsp, timeout_ms);
+  } else if (msg->__id__.type == MsgTypeServiceBroadcast) {
+    return putServiceBroadcast(msg, from_tsp, timeout_ms);
+  } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
+    return putServiceDiscovery(msg, from_tsp, timeout_ms);
+  } else {
+    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
+    return false;
+  }
 }
 
 inline void Router::addTransport(TransportBase *tsp) {
@@ -49,6 +71,7 @@ inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
 
 inline bool Router::routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
                                 int timeout_ms) {
+  UROS_PRINT("Route msg: %d, %d\n", msg->__id__.entry, msg->__id__.seq);
   if (to_tsp >= 0 && to_tsp < transports_.size()) {
     return transports_[to_tsp]->put(msg, from_tsp, timeout_ms);
   } else if (to_tsp < 0) {
@@ -89,25 +112,32 @@ inline bool Router::broadcast(const MsgBase *msg, int from_tsp,
   return true;
 }
 
-template <typename... TTransports>
-TransportManagerT<TTransports...>::TransportManagerT() {
-  [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    (([&]() {
-       auto &tsp = transport<Is>();
-       tsp.setId(Is).setRouter(&router_);
-       router_.addTransport(&tsp);
-     }()),
-     ...);
-  }(std::make_index_sequence<size>{});
+inline TransportManager::TransportManager() { addTransport<TransportLocal>(); }
+
+template <typename Transport> Transport *TransportManager::addTransport() {
+  if (transports_.full()) {
+    return nullptr;
+  }
+
+  auto tsp = new Transport;
+  assert(tsp);
+
+  tsp->setId(transports_.size()).setRouter(&router_);
+  router_.addTransport(tsp);
+
+  transports_.emplace_back(tsp);
+
+  return tsp;
 }
 
-template <typename... TTransports>
-void TransportManagerT<TTransports...>::init() {
-  std::apply(
-      [&](auto &&...transports) {
-        (([&](auto &&transport) { transport.init(); }(transports)), ...);
-      },
-      transports_);
+inline TransportLocal *TransportManager::getTransportLocal() {
+  return static_cast<TransportLocal *>(transports_[0].get());
+}
+
+inline void TransportManager::init() {
+  for (auto &tsp : transports_) {
+    tsp->init();
+  }
 }
 
 } // namespace uros

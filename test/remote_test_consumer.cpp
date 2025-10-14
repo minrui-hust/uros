@@ -2,14 +2,10 @@
 #include <thread>
 #include <chrono>
 
-#include "uros/system.h"
-#include "uros/transport_local.h"
-#include "uros/transport_remote_socket.h"
+#include "urosv2/transport_remote_socket.hpp"
+#include "urosv2/uros.h"
 
 using namespace std::chrono_literals;
-
-// 使用 TransportLocal + TransportRemoteSocket
-using Uros = uros::System<uros::TransportLocal, uros::TransportRemoteSocket>;
 
 // 传感器数据消息（与 Producer 定义一致）
 struct SensorData : uros::MsgBase {
@@ -21,18 +17,18 @@ struct SensorData : uros::MsgBase {
 
 void uros_init() {
   // 注册 topic
-  Uros::RegisterTopic<SensorData>("/sensor_data", 0);
+  uros::RegisterTopic<SensorData>("/sensor_data", 0);
   
-  // Transport 0: TransportLocal
-  auto &transport_local = Uros::Transport<0>();
-  transport_local.declareTopic("/sensor_data");
+  // config each transport
+  auto transport_local = uros::GetTransportLocal();
+  transport_local->declareTopic("/sensor_data");
   
   // Transport 1: 从 Relay (10003) 接收数据，监听 10004
-  auto &transport = Uros::Transport<1>();
-  transport.initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
-  transport.declareTopic("/sensor_data");
+  auto transport = uros::RegisterTransport<uros::TransportRemoteSocket>();
+  transport->initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
+  transport->declareTopic("/sensor_data");
   
-  Uros::Init();
+  uros::Init();
 }
 
 int main() {
@@ -40,7 +36,7 @@ int main() {
   
   uros_init();
 
-  Uros::Node consumer_node;
+  uros::Node consumer_node;
   
   // 订阅传感器数据
   auto data_sub = consumer_node.createSubscription<SensorData>(

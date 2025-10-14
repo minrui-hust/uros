@@ -27,7 +27,12 @@ struct TopicBase {
 
   const size_t &msgSize() const { return msg_size_; }
 
-  int32_t generation() const { return generation_; }
+  int32_t generation() const {
+    LockGuard<CriticalLock> lg;
+    return generation_;
+  }
+
+  virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
   virtual void recv(const MsgBase *msg) = 0;
 
@@ -37,10 +42,10 @@ protected:
   int prio_;
   type_id_t msg_type_;
   size_t msg_size_;
-  int32_t generation_ = -1;
+  int generation_ = -1;
 
-  etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
   etl::vector<etl::unique_ptr<PublisherBase>, UROS_TOPIC_MAX_PUBS> pubs_;
+  etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
 };
 
 template <typename TMsg> struct TopicT : public TopicBase {
@@ -58,7 +63,9 @@ template <typename TMsg> struct TopicT : public TopicBase {
 
   bool read(TMsg &msg, int32_t &gen);
 
-  void update(const TMsg &msg);
+  int update(const TMsg &msg);
+
+  etl::unique_ptr<MsgBase> createMsg() const override;
 
   void recv(const MsgBase *msg) override;
 
