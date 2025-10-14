@@ -1,8 +1,8 @@
 #pragma once
 
-#include "platform.h"
-
 #include "etl/vector.h"
+
+#include "platform.h"
 
 #include "msg.h"
 #include "publisher.h"
@@ -32,9 +32,9 @@ struct TopicBase {
     return generation_;
   }
 
-  virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
-
   virtual void recv(const MsgBase *msg) = 0;
+
+  virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
 protected:
   int id_; // global unique identification of a topic
@@ -54,10 +54,10 @@ template <typename TMsg> struct TopicT : public TopicBase {
   TopicT(const char *name, int id, int prio)
       : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
 
+  PublisherT<Msg> *addPublisher();
+
   SubscriptionT<Msg> *
   addSubscription(const std::function<void(const Msg &)> &cb);
-
-  PublisherT<Msg> *addPublisher();
 
   void write(const TMsg &msg);
 
@@ -65,9 +65,9 @@ template <typename TMsg> struct TopicT : public TopicBase {
 
   int update(const TMsg &msg);
 
-  etl::unique_ptr<MsgBase> createMsg() const override;
-
   void recv(const MsgBase *msg) override;
+
+  etl::unique_ptr<MsgBase> createMsg() const override;
 
 protected:
   TMsg msg_;

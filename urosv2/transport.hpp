@@ -1,5 +1,6 @@
 #pragma once
 
+#include "service.h"
 #include "topic.h"
 #include "transport.h"
 #include "transport_local.h"
@@ -25,6 +26,26 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
   topic_bit_mask_ |= 1 << topic_id;
 
   UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
+
+  return true;
+}
+
+inline bool TransportBase::declareService(const char *service_name) {
+  auto service = ServiceManager::FindService<ServiceBase>(service_name);
+  if (!service) {
+    return false;
+  }
+
+  auto service_id = service->id();
+  if ((size_t)service_id >= service_metas_.size()) {
+    return false;
+  }
+
+  auto &service_meta = service_metas_[service_id];
+  service_meta.service = service;
+  // TODO: more
+
+  UROS_PRINT("add service '%s' to transport %d succeed\n", topic_name, id_);
 
   return true;
 }

@@ -12,6 +12,7 @@
 namespace uros {
 
 struct TopicBase;
+struct ServiceBase;
 struct Router;
 
 struct TopicMeta {
@@ -24,6 +25,7 @@ struct TopicMeta {
 };
 
 struct ServiceMeta {
+  ServiceBase *service = nullptr;
   int dist = -1;
 };
 
@@ -36,6 +38,8 @@ struct RequestInfo {
 struct TransportBase {
 
   bool declareTopic(const char *topic_name);
+
+  bool declareService(const char *service_name);
 
   TransportBase &setId(int id) {
     id_ = id;

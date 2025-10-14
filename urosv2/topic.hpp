@@ -10,26 +10,34 @@
 
 namespace uros {
 
-template <typename Msg>
-SubscriptionT<Msg> *
-TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
-  auto sub = etl::unique_ptr(new SubscriptionT<Msg>(subs_.size()));
-  CHECK(sub);
-
-  sub->subscribe(this, cb);
-
-  return static_cast<SubscriptionT<Msg> *>(
-      subs_.emplace_back(etl::move(sub)).get());
-}
-
 template <typename Msg> PublisherT<Msg> *TopicT<Msg>::addPublisher() {
-  auto pub = etl::unique_ptr(new PublisherT<Msg>(pubs_.size()));
+  if (pubs_.full()) {
+    return nullptr;
+  }
+
+  auto pub = new PublisherT<Msg>(pubs_.size());
   CHECK(pub);
 
   pub->advertise(this);
+  pubs_.emplace_back(pub);
 
-  return static_cast<PublisherT<Msg> *>(
-      pubs_.emplace_back(etl::move(pub)).get());
+  return pub;
+}
+
+template <typename Msg>
+SubscriptionT<Msg> *
+TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
+  if (subs_.full()) {
+    return nullptr;
+  }
+
+  auto sub = new SubscriptionT<Msg>(subs_.size());
+  CHECK(sub);
+
+  sub->subscribe(this, cb);
+  subs_.emplace_back(sub);
+
+  return sub;
 }
 
 template <typename TMsg> void TopicT<TMsg>::write(const TMsg &msg) {
@@ -65,13 +73,13 @@ template <typename TMsg> int TopicT<TMsg>::update(const TMsg &msg) {
   return gen;
 }
 
+template <typename TMsg> void TopicT<TMsg>::recv(const MsgBase *msg) {
+  update(*static_cast<const TMsg *>(msg));
+}
+
 template <typename TMsg>
 etl::unique_ptr<MsgBase> TopicT<TMsg>::createMsg() const {
   return etl::unique_ptr(new TMsg());
-}
-
-template <typename TMsg> void TopicT<TMsg>::recv(const MsgBase *msg) {
-  update(*static_cast<const TMsg *>(msg));
 }
 
 template <typename Topic>
@@ -79,8 +87,6 @@ Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
   if ((size_t)id >= topics_.size()) {
     return nullptr;
   }
-
-  // TODO prio
 
   auto &topic = topics_[id];
   if (topic) {

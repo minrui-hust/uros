@@ -6,18 +6,21 @@ namespace uros {
 
 template <typename TReq, typename TRsp> struct ServiceT;
 
-struct ServerBase : SubscriptionBase {};
+struct ServerBase : SubscriptionBase {
+  ServerBase(int id) : SubscriptionBase(id) {}
+};
 
 template <typename TReq, typename TRsp> struct ServerT : ServerBase {
   using Service = ServiceT<TReq, TRsp>;
 
-  bool serve(Service *service,
-             const std::function<void(const TReq &, TRsp &)> &cb);
+  ServerT(int id) : ServerBase(id) {}
+
+  bool bind(Service *service,
+            const std::function<void(const TReq &, TRsp &)> &cb);
 
   void spinOnce() override;
 
 protected:
-  int id_; // TODO:
   Service *service_;
   std::function<void(const TReq &, TRsp &)> cb_;
 };

@@ -7,7 +7,6 @@
 #include "client.h"
 #include "msg.h"
 #include "server.h"
-#include "transport.h"
 #include "utils.h"
 
 namespace uros {
@@ -30,18 +29,8 @@ struct ServiceBase {
 
   const size_t &rspSize() const { return rsp_size_; }
 
-  bool registerServer(ServerBase *srv) {
-    srv_ = srv;
-    return true; // TODO: borad cast server registration
-  }
-
-  bool registerClient(ClientBase *cli) {
-    if (clis_.full()) {
-      return false;
-    }
-    clis_.emplace_back(cli);
-    return true;
-  }
+  virtual void recvRsp(const MsgBase *msg) = 0;
+  virtual void recvReq(const MsgBase *msg) = 0;
 
 protected:
   int id_;
@@ -51,8 +40,8 @@ protected:
   size_t req_size_;
   size_t rsp_size_;
 
-  ServerBase *srv_ = nullptr;
-  etl::vector<ClientBase *, UROS_SERVICE_MAX_CLIS> clis_;
+  etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
+  etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
 };
 
 template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
@@ -63,16 +52,32 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
       : ServiceBase(name, id, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
                     sizeof(TRsp)) {}
 
+  ClientT<Req, Rsp> *addClient();
+
+  ServerT<Req, Rsp> *
+  addServer(const std::function<void(const Req &, Rsp &)> &cb);
+
+  bool call(const Req &req, Rsp &rsp, int timeout_ms);
+
+  void recvRsp(const MsgBase *msg) override;
+  void recvReq(const MsgBase *msg) override;
+
+  const Req *req() { return req_; }
+  Rsp *rsp() { return rsp_; }
+  void notifyRsp() { sem_rsp_.give(); }
+
 protected:
-  TReq req_;
-  TRsp rsp_;
+  bool serveLocal(const Req &req, Rsp &rsp, int timeout_ms);
+  bool serveRemote(const Req &req, Rsp &rsp, int timeout_ms);
+
+protected:
+  Mutex lock_req_;
+  BinarySemaphore sem_rsp_;
+  const Req *req_ = nullptr;
+  Rsp *rsp_ = nullptr;
 };
 
 struct ServiceManager {
-  static ServiceManager &Instance() {
-    static ServiceManager inst;
-    return inst;
-  }
 
   template <typename Service>
   static Service *AddService(const char *name, int id) {
@@ -84,6 +89,11 @@ struct ServiceManager {
   }
 
 protected:
+  static ServiceManager &Instance() {
+    static ServiceManager inst;
+    return inst;
+  }
+
   template <typename Service> Service *addService(const char *name, int id);
 
   template <typename Service> Service *findService(const char *name);
@@ -94,7 +104,7 @@ protected:
   ServiceManager &operator=(const ServiceManager &other) = delete;
 
 protected:
-  etl::array<std::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_{};
+  etl::array<etl::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_{};
 };
 
 } // namespace uros
