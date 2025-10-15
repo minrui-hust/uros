@@ -17,7 +17,7 @@ struct ServiceBase {
       : id_(id), name_(name), req_type_(req_type), rsp_type_(rsp_type),
         req_size_(req_size), rsp_size_(rsp_size) {}
 
-  const int32_t &id() const { return id_; }
+  const auto &id() const { return id_; }
 
   const char *name() const { return name_; }
 
@@ -31,6 +31,8 @@ struct ServiceBase {
 
   virtual void recvRsp(const MsgBase *msg) = 0;
   virtual void recvReq(const MsgBase *msg) = 0;
+
+  virtual ~ServiceBase() = default;
 
 protected:
   int id_;
