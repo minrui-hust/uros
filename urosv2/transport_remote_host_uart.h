@@ -1,14 +1,12 @@
 #pragma once
 
-#include "can_v2.h"
-
 #include "transport_remote.h"
 
 namespace uros {
 
-struct TransportRemoteCan : public TransportRemote {
+struct TransportRemoteHostUart : public TransportRemote {
 
-  void initCan(const char *can_name, int can_id);
+  void initHostUart();
 
   int send(const void *data, size_t len, int prio, int timeout_ms) override;
 
@@ -17,10 +15,9 @@ struct TransportRemoteCan : public TransportRemote {
   // Returns the number of bytes in the received packet, or -1 on error
   int recv(void *data, size_t len, int *prio, int timeout_ms) override;
 
-  ~TransportRemoteCan() {}
+  ~TransportRemoteHostUart() {}
 
 private:
-  CanV2 *can_;
 };
 
 } // namespace uros

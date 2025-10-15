@@ -45,7 +45,7 @@ template <typename TMsg> void TopicT<TMsg>::write(const TMsg &msg) {
   TransportManager::GetTransportLocal()->sendMsg(this, msg);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int32_t &gen) {
   LockGuard<CriticalLock> guard;
   if (generation_ <= gen) {
     return false;
