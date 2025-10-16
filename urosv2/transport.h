@@ -55,20 +55,24 @@ struct TransportBase {
 
   virtual void init() {}
 
-  // put low level message on transport
-  bool put(const MsgBase *msg, int from_tsp, int timeout_ms);
+  // interface with router
+  bool routeIn(const MsgBase *msg, int from_tsp, int timeout_ms);
 
   virtual ~TransportBase() = default;
 
 protected:
-  virtual bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
-  virtual bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
-  virtual bool putResponse(const MsgBase *msg, int from_tsp,
-                           int timeout_ms) = 0;
-  virtual bool putServiceBroadcast(const MsgBase *msg, int from_tsp,
-                                   int timeout_ms) = 0;
-  virtual bool putServiceDiscovery(const MsgBase *msg, int from_tsp,
-                                   int timeout_ms) = 0;
+  virtual bool routeInNormal(const MsgBase *msg, int from_tsp,
+                             int timeout_ms) = 0;
+  virtual bool routeInRequest(const MsgBase *msg, int from_tsp,
+                              int timeout_ms) = 0;
+  virtual bool routeInResponse(const MsgBase *msg, int from_tsp,
+                               int timeout_ms) = 0;
+  virtual bool routeInServiceBroadcast(const MsgBase *msg, int from_tsp,
+                                       int timeout_ms) = 0;
+  virtual bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
+                                       int timeout_ms) = 0;
+
+  bool routeOut(const MsgBase *msg, int to_tsp = -1, int timeout_ms = -1);
 
 protected:
   int32_t id_ = -1;

@@ -4,10 +4,10 @@
 
 namespace uros {
 
-inline bool TransportLocal::putNormal(const MsgBase *msg, int from_tsp,
-                                      int timeout_ms) {
+inline bool TransportLocal::routeInNormal(const MsgBase *msg, int from_tsp,
+                                          int timeout_ms) {
   // TODO: check for redundant
-  auto topic_id = msg->__id__.entry;
+  auto topic_id = msg->__meta__.id.entry;
   if (topic_id >= topic_metas_.size()) {
     return false;
   }
@@ -17,45 +17,54 @@ inline bool TransportLocal::putNormal(const MsgBase *msg, int from_tsp,
     return false;
   }
 
-  topic_meta.topic->recv(msg);
+  topic_meta.topic->recvWrite(msg);
 
   return true;
 }
 
-inline bool TransportLocal::putRequest(const MsgBase *msg, int from_tsp,
-                                       int timeout_ms) {
+inline bool TransportLocal::routeInRequest(const MsgBase *msg, int from_tsp,
+                                           int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putResponse(const MsgBase *msg, int from_tsp,
-                                        int timeout_ms) {
+inline bool TransportLocal::routeInResponse(const MsgBase *msg, int from_tsp,
+                                            int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putServiceBroadcast(const MsgBase *msg,
-                                                int from_tsp, int timeout_ms) {
+inline bool TransportLocal::routeInServiceBroadcast(const MsgBase *msg,
+                                                    int from_tsp,
+                                                    int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportLocal::putServiceDiscovery(const MsgBase *msg,
-                                                int from_tsp, int timeout_ms) {
+inline bool TransportLocal::routeInServiceDiscovery(const MsgBase *msg,
+                                                    int from_tsp,
+                                                    int timeout_ms) {
   return false; // TODO
 }
 
 template <typename Topic>
-void TransportLocal::sendMsg(Topic *topic, const typename Topic::Msg &msg) {
-  msg.__id__.seq = topic->update(msg);
-  router_->route(&msg, id_, -1, 0); // broadcast without timeout
+int TransportLocal::write(Topic *topic, const typename Topic::Msg &msg) {
+  int gen = topic->doWrite(msg);
+  msg.__meta__.id.seq = gen;
+  router_->route(&msg, id_, -1, 0); // broadcast
+  return gen;
 }
 
 template <typename Service>
-void sendReq(Service *service, const typename Service::Req &req) {
-  // TODO
+bool TransportLocal::call(Service *service, const typename Service::Req &req,
+                          typename Service::Rsp &rsp, int timeout_ms) {
+  if (service->serverPresent()) {
+    return service->doCall(req, rsp, timeout_ms);
+  } else {
+    return remoteCall(&req, &rsp, timeout_ms);
+  }
 }
 
-template <typename Service>
-void sendRsp(Service *service, const typename Service::Rsp &rsp) {
-  // TODO
+inline bool TransportLocal::remoteCall(const MsgBase *req, MsgBase *rsp,
+                                       int timeout_ms) {
+  return false; // TODO
 }
 
 } // namespace uros

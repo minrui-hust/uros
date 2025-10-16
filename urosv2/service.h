@@ -29,7 +29,9 @@ struct ServiceBase {
 
   const size_t &rspSize() const { return rsp_size_; }
 
-  virtual void recv(const MsgBase *msg, int timeout_ms) = 0;
+  const bool serverPresent() const { return srvs_.size() > 0; }
+
+  virtual bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -60,23 +62,16 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   ServerT<Req, Rsp> *
   addServer(const std::function<void(const Req &, Rsp &)> &cb);
 
-  // used by client
+  // interface with client
   bool call(const Req &req, Rsp &rsp, int timeout_ms);
 
-  // used by server
+  // interface with transport
+  bool doCall(const Req &req, Rsp &rsp, int timeout_ms);
+  bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) override;
+
+  // interface with server
   bool readReq(Req &req, int &ver); // server get request from service
   void writeRsp(const Rsp &rsp);    // server write response to service
-
-  // called by transport
-  void recv(const MsgBase *msg, int timeout_ms) override;
-  void recvReq(const MsgBase *msg);
-  void recvRsp(const MsgBase *msg);
-
-protected:
-  bool callLocal(const Req &req, Rsp &rsp, int timeout_ms);
-  bool callRemote(const Req &req, Rsp &rsp, int timeout_ms);
-
-  bool waitRsp(Rsp &rsp, int timeout_ms);
 
 protected:
   Mutex lock_req_;

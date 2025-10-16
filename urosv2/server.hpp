@@ -11,8 +11,10 @@ bool ServerT<TReq, TRsp>::bind(
 }
 
 template <typename TReq, typename TRsp> void ServerT<TReq, TRsp>::spinOnce() {
-  cb_(*service_->req(), *service_->rsp());
-  service_->notifyRsp();
+  if (service_->readReq(req_, generation_)) {
+    cb_(req_, rsp_);
+    service_->writeRsp(rsp_);
+  }
 }
 
 } // namespace uros

@@ -23,6 +23,8 @@ template <typename TReq, typename TRsp> struct ServerT : ServerBase {
   void spinOnce() override;
 
 protected:
+  TReq req_;
+  TRsp rsp_;
   Service *service_;
   std::function<void(const TReq &, TRsp &)> cb_;
 };

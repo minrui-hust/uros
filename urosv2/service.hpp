@@ -46,36 +46,22 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, int timeout_ms) {
-  TransportManager::GetTransportLocal()->sendReq(this, req); // TODO: timeout
-  return waitRsp(rsp, timeout_ms);
+  return TransportManager::GetTransportLocal()->call(this, req, timeout_ms);
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
-  LockGuard<CriticalLock> lg;
-  if (req_version_ <= ver) {
+bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
+  if (srvs_.size() <= 0) { // no server registered
     return false;
   }
-  req = req_;
-  ver = req_version_;
-  return true;
-}
 
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
-  TransportManager::GetTransportLocal()->sendRsp(this, rsp);
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, int timeout_ms) {
   int64_t enter_ms = NowMilli();
 
   int timeout_now = etl::min(
       timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+
+  // take lock_req_, caused we only allow one access at same time
   LockGuard<Mutex> lg(lock_req_, timeout_now);
-  if (!lg.locked()) {
-    return false;
-  }
 
   { // update the request
     LockGuard<CriticalLock> lg;
@@ -83,76 +69,10 @@ bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, int timeout_ms) {
     ++req_version_;
   }
 
-  // notify the server
+  // notify server, and wait for server do the work
   srvs_[0]->notify();
 
-  // wait for response
-  timeout_now = etl::min(timeout_ms,
-                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
-  auto ret = waitRsp(rsp, timeout_now);
-
-  return ret;
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp, int timeout_ms) {
-  int64_t enter_ms = NowMilli();
-
-  int timeout_now = etl::min(
-      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
-  LockGuard<Mutex> lg(lock_req_, timeout_now);
-  if (!lg.locked()) {
-    return false;
-  }
-
-  // send request via transport
-  // TODO： this may need timeout?
-  TransportManager::GetTransportLocal()->sendReq(this, req);
-
-  // wait for response
-  timeout_now = etl::min(timeout_ms,
-                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
-  auto ret = waitRsp(rsp, timeout_now);
-
-  return ret;
-}
-
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::recvRsp(const MsgBase *msg) {
-  // !!!NOTE!!! transport layer should make sure:
-  // 1. msg is a Response
-  // 2. msg's entry is current service
-  // if these two does not meets, which means transport layer has an bug
-  {
-    LockGuard<CriticalLock> lg;
-    rsp_ = *static_cast<const Rsp *>(msg);
-    ++rsp_version_;
-  }
-
-  sem_rsp_.give();
-}
-
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::recvReq(const MsgBase *msg) {
-  if (srvs_.size() <= 0) {
-    return;
-  }
-
-  LockGuard<Mutex> lg(lock_req_);
-
-  { // update the request
-    LockGuard<CriticalLock> lg;
-    req_ = *static_cast<const Req *>(msg);
-    ++req_version_;
-  }
-
-  srvs_[0]->notify();
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
   bool rsp_ok = false;
-  int64_t enter_ms = NowMilli();
   do {
     int timeout_now = etl::min(
         timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
@@ -171,9 +91,36 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
         rsp_ok = true;
       }
     }
-  } while (rsp_ok);
+  } while (!rsp_ok);
 
   return true;
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::recvCall(const MsgBase *req, MsgBase *rsp,
+                                  int timeout_ms) {
+  return doCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), timeout_ms);
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
+  LockGuard<CriticalLock> lg;
+  if (req_version_ <= ver) {
+    return false;
+  }
+  req = req_;
+  ver = req_version_;
+  return true;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    rsp_ = rsp;
+    ++rsp_version_;
+  }
+  sem_rsp_.give();
 }
 
 template <typename Service>
