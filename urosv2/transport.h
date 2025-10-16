@@ -58,6 +58,8 @@ struct TransportBase {
   // put low level message on transport
   bool put(const MsgBase *msg, int from_tsp, int timeout_ms);
 
+  virtual ~TransportBase() = default;
+
 protected:
   virtual bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;
   virtual bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms) = 0;

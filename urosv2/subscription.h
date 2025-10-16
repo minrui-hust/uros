@@ -22,6 +22,8 @@ struct SubscriptionBase {
 
   virtual void spinOnce() = 0;
 
+  virtual ~SubscriptionBase() = default;
+
 protected:
   int id_; // index in topic
   EventGroup *evt_ = nullptr;

@@ -7,6 +7,8 @@ template <typename TReq, typename TRsp> struct ServiceT;
 struct ClientBase {
   ClientBase(int id) : id_(id) {}
 
+  virtual ~ClientBase() = default;
+
 protected:
   int id_;
 };

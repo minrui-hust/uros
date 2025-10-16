@@ -8,6 +8,8 @@ template <typename TReq, typename TRsp> struct ServiceT;
 
 struct ServerBase : SubscriptionBase {
   ServerBase(int id) : SubscriptionBase(id) {}
+
+  virtual ~ServerBase() = default;
 };
 
 template <typename TReq, typename TRsp> struct ServerT : ServerBase {
