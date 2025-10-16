@@ -132,7 +132,7 @@ inline bool Router::broadcast(const MsgBase *msg, int from_tsp,
                               int timeout_ms) {
   for (auto &tsp : transports_) {
     if (tsp->id() != from_tsp) {
-      tsp->put(msg, from_tsp, timeout_ms);
+      tsp->routeIn(msg, from_tsp, timeout_ms);
     }
   }
   return true;

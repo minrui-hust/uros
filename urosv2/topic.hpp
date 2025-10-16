@@ -41,7 +41,7 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
 }
 
 template <typename TMsg> int TopicT<TMsg>::write(const TMsg &msg) {
-  msg.__meta__.id.entry = id_;
+  msg.__meta__.entry = id_;
   return TransportManager::GetTransportLocal()->write(this, msg);
 }
 

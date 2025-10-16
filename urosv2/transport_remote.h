@@ -13,13 +13,13 @@ struct TransportRemote : public TransportBase {
   void init() override;
 
 protected:
-  bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putResponse(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putServiceBroadcast(const MsgBase *msg, int from_tsp,
-                           int timeout_ms) override;
-  bool putServiceDiscovery(const MsgBase *msg, int from_tsp,
-                           int timeout_ms) override;
+  // clang-format off
+  bool routeInNormal(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool routeInRequest(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool routeInResponse(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool routeInServiceBroadcast(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  // clang-format on
 
   void recvNormal(const MsgBase *msg);
   void recvRequest(const MsgBase *msg);

@@ -16,12 +16,12 @@ inline void TransportRemote::init() {
   CHECK(recv_worker_);
 }
 
-inline bool TransportRemote::putNormal(const MsgBase *msg, int from_tsp,
-                                       int timeout_ms) {
+inline bool TransportRemote::routeInNormal(const MsgBase *msg, int from_tsp,
+                                           int timeout_ms) {
   UROS_PRINT("TransportRemote.putNormal begin msg: %d, %d\n", msg->__id__.entry,
              msg->__id__.seq);
 
-  auto topic_id = msg->__meta__.id.entry;
+  auto topic_id = msg->__meta__.entry;
   if (topic_id >= topic_metas_.size()) {
     return false;
   }
@@ -37,7 +37,7 @@ inline bool TransportRemote::putNormal(const MsgBase *msg, int from_tsp,
     bool full = (meta.wr - meta.rd) >= 2;
     bool empty = meta.wr == meta.rd;
 
-    uint8_t diff = msg->__meta__.id.seq - meta.msgs[(meta.wr - 1) & 1];
+    uint8_t diff = msg->__meta__.seq - meta.msgs[(meta.wr - 1) & 1];
     bool drop = !empty && (diff > 0 && diff < 128);
 
     if (!full && !drop) {
@@ -50,29 +50,31 @@ inline bool TransportRemote::putNormal(const MsgBase *msg, int from_tsp,
     ThreadNotify(send_worker_.get(), 1 << topic_id);
   }
 
-  UROS_PRINT("TransportRemote.putNormal done msg: %d, %d\n", msg->__id__.entry,
-             msg->__id__.seq);
+  UROS_PRINT("TransportRemote.putNormal done msg: %d, %d\n",
+             msg->__meta__.entry, msg->__meta__.seq);
 
   return true;
 }
 
-inline bool TransportRemote::putRequest(const MsgBase *msg, int from_tsp,
-                                        int timeout_ms) {
+inline bool TransportRemote::routeInRequest(const MsgBase *msg, int from_tsp,
+                                            int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportRemote::putResponse(const MsgBase *msg, int from_tsp,
-                                         int timeout_ms) {
+inline bool TransportRemote::routeInResponse(const MsgBase *msg, int from_tsp,
+                                             int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportRemote::putServiceBroadcast(const MsgBase *msg,
-                                                 int from_tsp, int timeout_ms) {
+inline bool TransportRemote::routeInServiceBroadcast(const MsgBase *msg,
+                                                     int from_tsp,
+                                                     int timeout_ms) {
   return false; // TODO
 }
 
-inline bool TransportRemote::putServiceDiscovery(const MsgBase *msg,
-                                                 int from_tsp, int timeout_ms) {
+inline bool TransportRemote::routeInServiceDiscovery(const MsgBase *msg,
+                                                     int from_tsp,
+                                                     int timeout_ms) {
   return false; // TODO
 }
 
@@ -131,7 +133,7 @@ inline void TransportRemote::recvWork() {
   int prio;
   while (true) {
     auto len = recv(recv_buf_.data, sizeof(recv_buf_), &prio, -1); // block recv
-    if (len < (int)sizeof(MsgId)) {
+    if (len < (int)sizeof(MsgMeta)) {
       continue;
     }
 

@@ -7,7 +7,7 @@ namespace uros {
 inline bool TransportLocal::routeInNormal(const MsgBase *msg, int from_tsp,
                                           int timeout_ms) {
   // TODO: check for redundant
-  auto topic_id = msg->__meta__.id.entry;
+  auto topic_id = msg->__meta__.entry;
   if (topic_id >= topic_metas_.size()) {
     return false;
   }
@@ -47,7 +47,7 @@ inline bool TransportLocal::routeInServiceDiscovery(const MsgBase *msg,
 template <typename Topic>
 int TransportLocal::write(Topic *topic, const typename Topic::Msg &msg) {
   int gen = topic->doWrite(msg);
-  msg.__meta__.id.seq = gen;
+  msg.__meta__.seq = gen;
   router_->route(&msg, id_, -1, 0); // broadcast
   return gen;
 }
