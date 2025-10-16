@@ -1,4 +1,5 @@
 #pragma once
+#include <unistd.h>
 
 #include "transport_remote.h"
 
@@ -15,9 +16,10 @@ struct TransportRemoteHostUart : public TransportRemote {
   // Returns the number of bytes in the received packet, or -1 on error
   int recv(void *data, size_t len, int *prio, int timeout_ms) override;
 
-  ~TransportRemoteHostUart() {}
+  ~TransportRemoteHostUart() { close(fd_); }
 
 private:
+  int fd_ = 0;
 };
 
 } // namespace uros
