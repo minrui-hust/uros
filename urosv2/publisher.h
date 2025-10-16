@@ -7,6 +7,8 @@ template <typename TMsg> struct TopicT;
 struct PublisherBase {
   PublisherBase(int id) : id_(id) {}
 
+  virtual ~PublisherBase() = default;
+
 protected:
   int id_;
 };

@@ -36,6 +36,8 @@ struct TopicBase {
 
   virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
+  virtual ~TopicBase() = default;
+
 protected:
   int id_; // global unique identification of a topic
   const char *name_;
@@ -61,7 +63,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
 
   void write(const TMsg &msg);
 
-  bool read(TMsg &msg, int32_t &gen);
+  bool read(TMsg &msg, int &gen);
 
   int update(const TMsg &msg);
 

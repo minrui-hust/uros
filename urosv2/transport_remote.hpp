@@ -103,19 +103,20 @@ inline void TransportRemote::sendWork() {
     UROS_PRINT("TransportRemote::sendWork: wait done, 0x%x\n", flags);
 
     for (auto i = 0u; i < topic_metas_.size(); ++i) {
-      auto &meta = topic_metas_[i];
       if (flags & (1 << i)) {
-        bool empty;
-        int rd;
+        auto &meta = topic_metas_[i];
+        int rd_ptr;
         { // get empty state and read ptr
           LockGuard<CriticalLock> lg;
-          empty = meta.rd == meta.wr;
-          rd = meta.rd = meta.wr - 1; // only keep the latest data
+          if (meta.rd == meta.wr) {
+            continue;
+          }
+          rd_ptr = meta.rd = meta.wr - 1; // only keep the latest data
         }
 
         // blocking send
-        send(meta.msgs[rd & 1].get(), meta.topic->msgSize(), meta.topic->prio(),
-             -1);
+        send(meta.msgs[rd_ptr & 1].get(), meta.topic->msgSize(),
+             meta.topic->prio(), -1);
 
         { // update read ptr
           LockGuard<CriticalLock> lg;
@@ -130,7 +131,7 @@ inline void TransportRemote::recvWork() {
   int prio;
   while (true) {
     auto len = recv(recv_buf_.data, sizeof(recv_buf_), &prio, -1); // block recv
-    if (len < sizeof(MsgId)) {
+    if (len < (int)sizeof(MsgId)) {
       continue;
     }
 

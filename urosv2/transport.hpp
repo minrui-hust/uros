@@ -93,7 +93,7 @@ inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
 inline bool Router::routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
                                 int timeout_ms) {
   UROS_PRINT("Route msg: %d, %d\n", msg->__id__.entry, msg->__id__.seq);
-  if (to_tsp >= 0 && to_tsp < transports_.size()) {
+  if (to_tsp >= 0 && (size_t)to_tsp < transports_.size()) {
     return transports_[to_tsp]->put(msg, from_tsp, timeout_ms);
   } else if (to_tsp < 0) {
     return broadcast(msg, from_tsp, timeout_ms);
