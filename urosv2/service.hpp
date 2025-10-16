@@ -46,63 +46,132 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, int timeout_ms) {
-  if (!srvs_.empty()) {
-    return serveLocal(req, rsp, timeout_ms);
-  } else {
-    return serveRemote(req, rsp, timeout_ms);
-  }
+  TransportManager::GetTransportLocal()->sendReq(this, req); // TODO: timeout
+  return waitRsp(rsp, timeout_ms);
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::serveLocal(const Req &req, Rsp &rsp, int timeout_ms) {
-  LockGuard<Mutex> lg(lock_req_, timeout_ms);
-  if (!lg.locked()) {
+bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
+  LockGuard<CriticalLock> lg;
+  if (req_version_ <= ver) {
     return false;
   }
-
-  // clear maybe out dated rsp
-  sem_rsp_.take(0);
-
-  // prepare req and rsp
-  req_ = &req;
-  rsp_ = &rsp;
-
-  // notify the server to process
-  srvs_[0]->notify();
-
-  // wait for server process done
-  if (!sem_rsp_.take(timeout_ms)) {
-    return false;
-  }
-
-  // rsp_ will be assigned by server
-
+  req = req_;
+  ver = req_version_;
   return true;
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::serveRemote(const Req &req, Rsp &rsp, int timeout_ms) {
-  LockGuard<Mutex> lg(lock_req_, timeout_ms);
+void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
+  TransportManager::GetTransportLocal()->sendRsp(this, rsp);
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, int timeout_ms) {
+  int64_t enter_ms = NowMilli();
+
+  int timeout_now = etl::min(
+      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  LockGuard<Mutex> lg(lock_req_, timeout_now);
   if (!lg.locked()) {
     return false;
   }
 
-  // clear maybe out dated rsp
-  sem_rsp_.take(0);
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    req_ = req;
+    ++req_version_;
+  }
 
-  // prepare req and rsp
-  req_ = &req;
-  rsp_ = &rsp;
+  // notify the server
+  srvs_[0]->notify();
 
-  // send request via transport
-  TransportManager::GetTransportLocal()->sendReq(this, req);
+  // wait for response
+  timeout_now = etl::min(timeout_ms,
+                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  auto ret = waitRsp(rsp, timeout_now);
 
-  // wait for server process done
-  if (!sem_rsp_.take(timeout_ms)) {
+  return ret;
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp, int timeout_ms) {
+  int64_t enter_ms = NowMilli();
+
+  int timeout_now = etl::min(
+      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  LockGuard<Mutex> lg(lock_req_, timeout_now);
+  if (!lg.locked()) {
     return false;
   }
 
-  // rsp_ will be assigned in recvRsp
+  // send request via transport
+  // TODO： this may need timeout?
+  TransportManager::GetTransportLocal()->sendReq(this, req);
+
+  // wait for response
+  timeout_now = etl::min(timeout_ms,
+                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  auto ret = waitRsp(rsp, timeout_now);
+
+  return ret;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::recvRsp(const MsgBase *msg) {
+  // !!!NOTE!!! transport layer should make sure:
+  // 1. msg is a Response
+  // 2. msg's entry is current service
+  // if these two does not meets, which means transport layer has an bug
+  {
+    LockGuard<CriticalLock> lg;
+    rsp_ = *static_cast<const Rsp *>(msg);
+    ++rsp_version_;
+  }
+
+  sem_rsp_.give();
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::recvReq(const MsgBase *msg) {
+  if (srvs_.size() <= 0) {
+    return;
+  }
+
+  LockGuard<Mutex> lg(lock_req_);
+
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    req_ = *static_cast<const Req *>(msg);
+    ++req_version_;
+  }
+
+  srvs_[0]->notify();
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
+  bool rsp_ok = false;
+  int64_t enter_ms = NowMilli();
+  do {
+    int timeout_now = etl::min(
+        timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+    if (!sem_rsp_.take(timeout_now)) {
+      return false;
+    }
+
+    // if we take the semaphore successfully, but rsp_ok is not true,
+    // this means older or wrong rsp was routed to this service, we
+    // should discarded the rsp and wait again, until timeout
+
+    { // access to rsp_ should be in critical region
+      LockGuard<CriticalLock> lg;
+      if (req_.__meta__.id == rsp_.__meta__.id) {
+        rsp = rsp_;
+        rsp_ok = true;
+      }
+    }
+  } while (rsp_ok);
 
   return true;
 }

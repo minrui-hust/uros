@@ -46,7 +46,7 @@ template <typename TMsg> void TopicT<TMsg>::write(const TMsg &msg) {
 }
 
 template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
-  LockGuard<CriticalLock> guard;
+  LockGuard<CriticalLock> lg;
   if (generation_ <= gen) {
     return false;
   }
@@ -58,7 +58,7 @@ template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
 template <typename TMsg> int TopicT<TMsg>::update(const TMsg &msg) {
   int gen;
   { // update msg in critical section
-    LockGuard<CriticalLock> guard;
+    LockGuard<CriticalLock> lg;
     msg_ = msg;
     gen = ++generation_;
   }
