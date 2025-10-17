@@ -40,22 +40,8 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
   return sub;
 }
 
-template <typename TMsg> int TopicT<TMsg>::write(const TMsg &msg) {
-  msg.__meta__.entry = id_;
-  return TransportManager::GetTransportLocal()->write(this, msg);
-}
-
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
-  LockGuard<CriticalLock> lg;
-  if (generation_ <= gen) {
-    return false;
-  }
-  msg = msg_;
-  gen = generation_;
-  return true;
-}
-
-template <typename TMsg> int TopicT<TMsg>::doWrite(const TMsg &msg) {
+template <typename TMsg>
+int TopicT<TMsg>::write(TransportBase *tsp, const TMsg &msg) {
   int gen;
   { // update msg in critical section
     LockGuard<CriticalLock> lg;
@@ -73,8 +59,19 @@ template <typename TMsg> int TopicT<TMsg>::doWrite(const TMsg &msg) {
   return gen;
 }
 
-template <typename TMsg> int TopicT<TMsg>::doWrite(const MsgBase *msg) {
-  return doWrite(*static_cast<const TMsg *>(msg));
+template <typename TMsg>
+int TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
+  return write(tsp, *static_cast<TMsg *>(msg));
+}
+
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
+  LockGuard<CriticalLock> lg;
+  if (generation_ <= gen) {
+    return false;
+  }
+  msg = msg_;
+  gen = generation_;
+  return true;
 }
 
 template <typename TMsg>

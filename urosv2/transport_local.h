@@ -7,11 +7,13 @@ namespace uros {
 
 struct TransportLocal : public TransportBase {
 
-  // interface with topic
+  // interface with publisher
   template <typename Topic>
   int write(Topic *topic, const typename Topic::Msg &msg);
 
-  // interface with service
+  template <typename Topic> void notify(Topic *topic);
+
+  // interface with client
   template <typename Service>
   bool call(Service *service, const typename Service::Req &req,
             typename Service::Rsp &rsp, int timeout_ms);

@@ -62,6 +62,8 @@ struct TransportBase {
   // interface with router
   bool routeIn(const MsgBase *msg, int from_tsp, int timeout_ms);
 
+  virtual void notify(TopicBase *topic) = 0;
+
   virtual ~TransportBase() = default;
 
 protected:

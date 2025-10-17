@@ -7,6 +7,7 @@
 #include "msg.h"
 #include "publisher.h"
 #include "subscription.h"
+#include "transport.h"
 #include "utils.h"
 
 namespace uros {
@@ -32,7 +33,7 @@ struct TopicBase {
     return generation_;
   }
 
-  virtual int doWrite(const MsgBase *msg) = 0;
+  virtual int write(TransportBase *tsp, const MsgBase *msg) = 0;
 
   virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
@@ -61,15 +62,13 @@ template <typename TMsg> struct TopicT : public TopicBase {
   SubscriptionT<Msg> *
   addSubscription(const std::function<void(const Msg &)> &cb);
 
-  // interface for publisher
-  int write(const TMsg &msg);
+  // write new msg on topic
+  template <typename Transport> int write(Transport *tsp, const TMsg &msg);
+
+  int write(TransportBase *tsp, const MsgBase *msg) override;
 
   // interface for subscriber
   bool read(TMsg &msg, int &gen);
-
-  // interface for transport
-  int doWrite(const TMsg &msg);
-  int doWrite(const MsgBase *msg) override;
 
   etl::unique_ptr<MsgBase> createMsg() const override;
 
