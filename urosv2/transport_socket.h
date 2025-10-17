@@ -6,11 +6,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "transport_remote.h"
+#include "transport.h"
 
 namespace uros {
 
-struct TransportRemoteSocket : public TransportRemote {
+struct TransportSocket : public TransportBase {
 
   void initSocket(const char *local_addr, uint16_t local_port,
                   const char *remote_addr, uint16_t remote_port);
@@ -22,7 +22,7 @@ struct TransportRemoteSocket : public TransportRemote {
   // Returns the number of bytes in the received packet, or -1 on error
   int recv(void *data, size_t len, int *prio, int timeout_ms) override;
 
-  ~TransportRemoteSocket() {
+  ~TransportSocket() {
     if (sockfd_ >= 0) {
       close(sockfd_);
     }

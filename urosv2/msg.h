@@ -12,13 +12,30 @@ enum MsgType {
   MsgTypeServiceDiscovery = 4,
 }; // this should be 1 bytes
 
+struct __attribute__((packed)) ReqId {
+  uint8_t system : 5;
+  uint8_t service : 6;
+  uint8_t client : 5;
+  uint8_t seq;
+};
+static_assert(sizeof(ReqId) == 3);
+
+using RspId = ReqId;
+
+struct __attribute__((packed)) MsgId {
+  uint8_t topic;
+  int16_t seq;
+};
+static_assert(sizeof(ReqId) == 3);
+
 // all message should derived from this
 struct __attribute__((packed)) MsgMeta {
-  uint32_t system : 5;      // system id
-  uint32_t entry : 6;       // topic or service id
-  uint32_t participant : 5; // publisher or client id on one topic or service
-  uint32_t seq : 8; // always inc seq, !!! WARN, do not change size of this !!!
-  uint32_t type : 8;
+  uint8_t type;
+  union __attribute__((packed)) {
+    MsgId msg;
+    ReqId req;
+    RspId rsp;
+  } id;
 };
 static_assert(sizeof(MsgMeta) == 4);
 

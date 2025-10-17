@@ -3,7 +3,6 @@
 #include "service.h"
 #include "topic.h"
 #include "transport.h"
-#include "transport_local.h"
 
 namespace uros {
 
@@ -27,8 +26,9 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
 
   meta.reset(new TopicMeta);
   meta->topic = topic;
-  meta->msgs[0] = topic->createMsg();
-  meta->msgs[1] = topic->createMsg();
+  topic->addTransport(this);
+
+  topic_bit_mask_ |= 1 << topic_id;
 
   UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
@@ -60,119 +60,109 @@ inline bool TransportBase::declareService(const char *service_name) {
   return true;
 }
 
-inline bool TransportBase::routeIn(const MsgBase *msg, int from_tsp,
-                                   int timeout_ms) {
-  if (msg->__meta__.type == MsgType::MsgTypeNormal) {
-    return routeInNormal(msg, from_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeRequest) {
-    return routeInRequest(msg, from_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
-    return routeInResponse(msg, from_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
-    return routeInServiceBroadcast(msg, from_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
-    return routeInServiceDiscovery(msg, from_tsp, timeout_ms);
-  } else {
-    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
-    return false;
-  }
+inline void TransportBase::init() {
+  send_worker_ = std::make_unique<Thread>(
+      "transport_send_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
+      UROS_TRANSPORT_WORKER_PRIORITY, [&]() { sendWork(); });
+  CHECK(send_worker_);
+
+  recv_worker_ = std::make_unique<Thread>(
+      "transport_recv_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
+      UROS_TRANSPORT_WORKER_PRIORITY, [&]() { recvWork(); });
+  CHECK(recv_worker_);
 }
 
-inline bool TransportBase::routeOut(const MsgBase *msg, int to_tsp,
-                                    int timeout_ms) {
-  return router_->route(msg, id_, to_tsp, timeout_ms);
+inline void TransportBase::notify(TopicBase *topic) {
+  ThreadNotify(send_worker_.get(), 1 << topic->id());
 }
 
-inline void Router::addTransport(TransportBase *tsp) {
-  transports_.emplace_back(tsp);
-}
+inline void TransportBase::sendWork() {
+  uint32_t flags;
+  while (true) {
+    ThreadNotifyWait(0, topic_bit_mask_, &flags, -1); // blocking wait
+    UROS_PRINT("TransportBase::sendWork: wait done, 0x%x\n", flags);
 
-inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
-                          int timeout_ms) {
-  if (msg->__meta__.type == MsgType::MsgTypeNormal) {
-    return routeNormal(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeRequest) {
-    return routeRequest(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
-    return routeResponse(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
-    return routeServiceBroadcast(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
-    return routeServiceDiscovery(msg, from_tsp, to_tsp, timeout_ms);
-  } else {
-    UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
-    return false;
-  }
-}
-
-inline bool Router::routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
-                                int timeout_ms) {
-  UROS_PRINT("Route msg: %d, %d\n", msg->__meta__.id.entry,
-             msg->__meta__.id.seq);
-  if (to_tsp >= 0 && (size_t)to_tsp < transports_.size()) {
-    return transports_[to_tsp]->routeIn(msg, from_tsp, timeout_ms);
-  } else if (to_tsp < 0) {
-    return broadcast(msg, from_tsp, timeout_ms);
-  } else {
-    UROS_PRINT("Invalid to_tsp:%d\n", to_tsp);
-    return false;
-  }
-}
-
-inline bool Router::routeRequest(const MsgBase *msg, int from_tsp, int to_tsp,
-                                 int timeout_ms) {
-  return false; // TODO
-}
-
-inline bool Router::routeResponse(const MsgBase *msg, int from_tsp, int to_tsp,
-                                  int timeout_ms) {
-  return false; // TODO
-}
-
-inline bool Router::routeServiceBroadcast(const MsgBase *msg, int from_tsp,
-                                          int to_tsp, int timeout_ms) {
-  return false; // TODO
-}
-
-inline bool Router::routeServiceDiscovery(const MsgBase *msg, int from_tsp,
-                                          int to_tsp, int timeout_ms) {
-  return false; // TODO
-}
-
-inline bool Router::broadcast(const MsgBase *msg, int from_tsp,
-                              int timeout_ms) {
-  for (auto &tsp : transports_) {
-    if (tsp->id() != from_tsp) {
-      tsp->routeIn(msg, from_tsp, timeout_ms);
+    for (auto i = 0u; i < topic_metas_.size(); ++i) {
+      if (flags & (1 << i)) {
+        auto &meta = topic_metas_[i];
+        if (meta->topic->read(&send_buf_.msg, meta->seq)) {
+          send(&send_buf_.msg, meta->topic->msgSize(), meta->topic->prio(), -1);
+        }
+      }
     }
   }
-  return true;
 }
 
-inline TransportManager::TransportManager() { addTransport<TransportLocal>(); }
+inline void TransportBase::recvWork() {
+  int prio;
+  while (true) {
+    auto len = recv(recv_buf_.data, sizeof(recv_buf_), &prio, -1);
+    if (len < (int)sizeof(MsgMeta)) {
+      continue;
+    }
+
+    auto msg = &recv_buf_.msg;
+    if (msg->__meta__.type == MsgType::MsgTypeNormal) {
+      recvNormal(msg);
+    } else if (msg->__meta__.type == MsgType::MsgTypeRequest) {
+      recvRequest(msg);
+    } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
+      recvResponse(msg);
+    } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
+      recvServiceBroadcast(msg);
+    } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
+      recvServiceDiscovery(msg);
+    } else {
+      UROS_PRINT("Unknow msg type: %d\n", msg->__meta__.type);
+    }
+  }
+}
+
+inline void TransportBase::recvNormal(const MsgBase *msg) {
+  UROS_PRINT("TransportBase::recvNormal, topic_id: %d\n", msg->__meta__.entry);
+  auto topic_id = msg->__meta__.id.msg.topic;
+  if (topic_id >= topic_metas_.size() || !topic_metas_[topic_id]) {
+    return;
+  }
+
+  auto &meta = topic_metas_[topic_id];
+
+  meta->topic->write(msg, this);
+}
+
+inline void TransportBase::recvRequest(const MsgBase *msg) {
+  // TODO
+}
+
+inline void TransportBase::recvResponse(const MsgBase *msg) {
+  // TODO
+}
+
+inline void TransportBase::recvServiceBroadcast(const MsgBase *msg) {
+  // TODO
+}
+
+inline void TransportBase::recvServiceDiscovery(const MsgBase *msg) {
+  // TODO
+}
 
 template <typename Transport> Transport *TransportManager::addTransport() {
-  if (transports_.full()) {
+  if (tsps_.full()) {
     return nullptr;
   }
 
-  auto tsp = new Transport;
+  auto tsp = new Transport();
   assert(tsp);
 
-  tsp->setId(transports_.size()).setRouter(&router_);
-  router_.addTransport(tsp);
+  tsp->id() = tsps_.size();
 
-  transports_.emplace_back(tsp);
+  tsps_.emplace_back(tsp);
 
   return tsp;
 }
 
-inline TransportLocal *TransportManager::getTransportLocal() {
-  return static_cast<TransportLocal *>(transports_[0].get());
-}
-
 inline void TransportManager::init() {
-  for (auto &tsp : transports_) {
+  for (auto &tsp : tsps_) {
     tsp->init();
   }
 }

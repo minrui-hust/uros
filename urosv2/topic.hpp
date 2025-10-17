@@ -6,9 +6,18 @@
 
 #include "publisher.h"
 #include "subscription.h"
-#include "transport_local.h"
 
 namespace uros {
+
+inline bool TopicBase::addTransport(TransportBase *tsp) {
+  if (tsps_.full()) {
+    return false;
+  }
+
+  tsps_.emplace_back(tsp);
+
+  return true;
+}
 
 template <typename Msg> PublisherT<Msg> *TopicT<Msg>::addPublisher() {
   if (pubs_.full()) {
@@ -41,42 +50,47 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
 }
 
 template <typename TMsg>
-int TopicT<TMsg>::write(TransportBase *tsp, const TMsg &msg) {
-  int gen;
+int16_t TopicT<TMsg>::write(const TMsg &msg, TransportBase *from_tsp) {
   { // update msg in critical section
     LockGuard<CriticalLock> lg;
+    if (msg.__meta__.id.msg.seq - msg_.__meta__.id.msg.seq <= 0) {
+      return msg_.__meta__.id.msg.seq;
+    }
     msg_ = msg;
-    gen = ++generation_;
   }
 
-  // notify subscriber to consume it
-  // this should be done before route msg,
-  // cause higher priority task may be waken
-  for (auto i = 0u; i < subs_.size(); ++i) {
-    subs_[i]->notify();
+  // first notify subs, cause higher prior work may waken
+  for (auto &sub : subs_) {
+    sub->notify();
   }
 
-  return gen;
+  // then notify tsps
+  for (auto &tsp : tsps_) {
+    if (tsp != from_tsp) {
+      tsp->notify(this);
+    }
+  }
+
+  return msg.__meta__.id.msg.seq;
 }
 
 template <typename TMsg>
-int TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
-  return write(tsp, *static_cast<TMsg *>(msg));
+int16_t TopicT<TMsg>::write(const MsgBase *msg, TransportBase *from_tsp) {
+  return write(*static_cast<const TMsg *>(msg), from_tsp);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &gen) {
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int16_t &seq) {
   LockGuard<CriticalLock> lg;
-  if (generation_ <= gen) {
+  if (msg_.__meta__.id.msg.seq - seq <= 0) {
     return false;
   }
   msg = msg_;
-  gen = generation_;
+  seq = msg_.__meta__.id.msg.seq;
   return true;
 }
 
-template <typename TMsg>
-etl::unique_ptr<MsgBase> TopicT<TMsg>::createMsg() const {
-  return etl::unique_ptr(new TMsg());
+template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int16_t &seq) {
+  return read(*static_cast<TMsg *>(msg), seq);
 }
 
 template <typename Topic>

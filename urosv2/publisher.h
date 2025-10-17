@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace uros {
 
 template <typename TMsg> struct TopicT;
@@ -25,6 +27,7 @@ template <typename TMsg> struct PublisherT : public PublisherBase {
 
 protected:
   Topic *topic_;
+  int16_t seq_ = 0;
 };
 
 } // namespace uros

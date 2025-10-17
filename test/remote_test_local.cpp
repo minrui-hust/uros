@@ -1,8 +1,7 @@
 #include <iostream>
 #include <thread>
 
-#include "urosv2/transport_remote_socket.hpp"
-
+#include "urosv2/transport_socket.hpp"
 #include "urosv2/uros.h"
 
 using namespace std::chrono_literals;
@@ -20,11 +19,7 @@ void uros_init() {
   uros::RegisterTopic<MessageResponse>("/hello_response", 1);
 
   // config each transport
-  auto transport_local = uros::GetTransportLocal();
-  transport_local->declareTopic("/hello");
-  transport_local->declareTopic("/hello_response");
-
-  auto transport_udp = uros::RegisterTransport<uros::TransportRemoteSocket>();
+  auto transport_udp = uros::RegisterTransport<uros::TransportSocket>();
   transport_udp->initSocket("127.0.0.1", 10001, "127.0.0.1", 10002);
   transport_udp->declareTopic("/hello");
   transport_udp->declareTopic("/hello_response");
@@ -72,11 +67,11 @@ int main() {
 
   MessageHello hello = {.seq = 0};
   while (true) {
-    std::cout << "pubish 'Hello': " << hello.seq << std::endl;
+    std::cout << "publish 'Hello': " << hello.seq << std::endl;
     talker_pub->publish(hello);
     ++hello.seq;
 
-    std::this_thread::sleep_for(1ms);
+    std::this_thread::sleep_for(1000ms);
   }
 
   return 0;

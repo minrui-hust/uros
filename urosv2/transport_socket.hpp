@@ -1,13 +1,13 @@
 #pragma once
 
-#include "transport_remote_socket.h"
+#include "transport_socket.h"
 
 namespace uros {
 
-inline void TransportRemoteSocket::initSocket(const char *local_addr,
-                                              uint16_t local_port,
-                                              const char *remote_addr,
-                                              uint16_t remote_port) {
+inline void TransportSocket::initSocket(const char *local_addr,
+                                        uint16_t local_port,
+                                        const char *remote_addr,
+                                        uint16_t remote_port) {
   // Create UDP socket
   sockfd_ = socket(AF_INET, SOCK_DGRAM, 0);
   assert(sockfd_ >= 0);
@@ -32,20 +32,20 @@ inline void TransportRemoteSocket::initSocket(const char *local_addr,
   remote_sockaddr_.sin_addr.s_addr = inet_addr(remote_addr);
 }
 
-inline int TransportRemoteSocket::send(const void *data, size_t len, int prio,
-                                       int timeout_ms) {
-  UROS_PRINT("transport_remote_socket.send: %zu\n", len);
+inline int TransportSocket::send(const void *data, size_t len, int prio,
+                                 int timeout_ms) {
+  UROS_PRINT("transport_socket.send: %zu\n", len);
   return sendto(sockfd_, data, len, 0, (struct sockaddr *)&remote_sockaddr_,
                 sizeof(remote_sockaddr_));
 }
 
-inline int TransportRemoteSocket::recv(void *data, size_t len, int *prio,
-                                       int timeout_ms) {
+inline int TransportSocket::recv(void *data, size_t len, int *prio,
+                                 int timeout_ms) {
   int received = 0;
   while (received <= 0) {
     received = recvfrom(sockfd_, data, len, 0, nullptr, nullptr);
   }
-  UROS_PRINT("transport_remote_socket.recv: %d\n", received);
+  UROS_PRINT("transport_socket.recv: %d\n", received);
   return received;
 }
 

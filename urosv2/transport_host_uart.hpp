@@ -8,12 +8,12 @@
 #include <termios.h>
 #include <time.h>
 
-#include "transport_remote_host_uart.h"
+#include "transport_host_uart.h"
 
 namespace uros {
 
-inline void TransportRemoteHostUart::initHostUart() {
-  //打开设备
+inline void TransportHostUart::initHostUart() {
+  // 打开设备
   fd_ = open("/dev/ttyACM0", O_RDWR | O_NOCTTY);
   //   if (fd < 0) {
   //     perror("open");
@@ -44,18 +44,18 @@ inline void TransportRemoteHostUart::initHostUart() {
   tcflush(fd_, TCIOFLUSH);
 }
 
-inline int TransportRemoteHostUart::send(const void *data, size_t len, int prio,
-                                         int timeout_ms) {
-  UROS_PRINT("transport_remote_socket.send: %zu\n", len);
+inline int TransportHostUart::send(const void *data, size_t len, int prio,
+                                   int timeout_ms) {
+  UROS_PRINT("transport_host_uart.send: %zu\n", len);
   return write(fd_, data, len);
 }
 
-inline int TransportRemoteHostUart::recv(void *data, size_t len, int *prio,
-                                         int timeout_ms) {
+inline int TransportHostUart::recv(void *data, size_t len, int *prio,
+                                   int timeout_ms) {
 
   int received = read(fd_, data, len);
 
-  UROS_PRINT("transport_remote_socket.recv: %d\n", received);
+  UROS_PRINT("transport_host_uart.recv: %d\n", received);
   return received;
 }
 

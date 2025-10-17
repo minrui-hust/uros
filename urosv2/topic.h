@@ -7,10 +7,11 @@
 #include "msg.h"
 #include "publisher.h"
 #include "subscription.h"
-#include "transport.h"
 #include "utils.h"
 
 namespace uros {
+
+struct TransportBase;
 
 struct TopicBase {
   TopicBase(const char *name, int id, int prio, type_id_t msg_type,
@@ -28,14 +29,11 @@ struct TopicBase {
 
   const size_t &msgSize() const { return msg_size_; }
 
-  int32_t generation() const {
-    LockGuard<CriticalLock> lg;
-    return generation_;
-  }
+  bool addTransport(TransportBase *tsp);
 
-  virtual int write(TransportBase *tsp, const MsgBase *msg) = 0;
-
-  virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
+  virtual bool read(MsgBase *msg, int16_t &seq) = 0;
+  virtual int16_t write(const MsgBase *msg,
+                        TransportBase *from_tsp = nullptr) = 0;
 
   virtual ~TopicBase() = default;
 
@@ -45,17 +43,19 @@ protected:
   int prio_;
   type_id_t msg_type_;
   size_t msg_size_;
-  int generation_ = -1;
 
   etl::vector<etl::unique_ptr<PublisherBase>, UROS_TOPIC_MAX_PUBS> pubs_;
   etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
+  etl::vector<TransportBase *, UROS_MAX_TRANSPORTS> tsps_;
 };
 
 template <typename TMsg> struct TopicT : public TopicBase {
   using Msg = TMsg;
 
   TopicT(const char *name, int id, int prio)
-      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
+      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {
+    msg_.__meta__.id.msg.seq = -1;
+  }
 
   PublisherT<Msg> *addPublisher();
 
@@ -63,14 +63,12 @@ template <typename TMsg> struct TopicT : public TopicBase {
   addSubscription(const std::function<void(const Msg &)> &cb);
 
   // write new msg on topic
-  template <typename Transport> int write(Transport *tsp, const TMsg &msg);
+  int16_t write(const TMsg &msg, TransportBase *from_tsp = nullptr);
+  int16_t write(const MsgBase *msg, TransportBase *from_tsp = nullptr) override;
 
-  int write(TransportBase *tsp, const MsgBase *msg) override;
-
-  // interface for subscriber
-  bool read(TMsg &msg, int &gen);
-
-  etl::unique_ptr<MsgBase> createMsg() const override;
+  // read msg on topic
+  bool read(TMsg &msg, int16_t &gen);
+  bool read(MsgBase *msg, int16_t &gen) override;
 
 protected:
   TMsg msg_;

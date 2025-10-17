@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <tuple>
 
 #include "etl/vector.h"
 
@@ -16,11 +15,8 @@ struct ServiceBase;
 struct Router;
 
 struct TopicMeta {
-  TopicBase *topic;
-  // simple ring buffer with depth 2
-  int wr = 0;
-  int rd = 0;
-  etl::unique_ptr<MsgBase> msgs[2];
+  TopicBase *topic = nullptr;
+  int16_t seq = -1;
 };
 
 struct ServiceMeta {
@@ -33,52 +29,39 @@ struct ServiceMeta {
   int dist = -1;
 };
 
-struct RequestInfo {
-  int tsp_in;            // which transport this request come from
-  uint32_t req_id;       // unique global identifier of an request
-  int64_t deadline = -1; // after deadline, request is treat as invalid
-};
-
 struct TransportBase {
+
+  auto &id() { return id_; }
+  const auto &id() const { return id_; }
 
   bool declareTopic(const char *topic_name);
 
   bool declareService(const char *service_name);
 
-  TransportBase &setId(int id) {
-    id_ = id;
-    return *this;
-  }
+  void init();
 
-  TransportBase &setRouter(Router *router) {
-    router_ = router;
-    return *this;
-  }
-
-  const auto &id() const { return id_; }
-
-  virtual void init() {}
-
-  // interface with router
-  bool routeIn(const MsgBase *msg, int from_tsp, int timeout_ms);
-
-  virtual void notify(TopicBase *topic) = 0;
+  void notify(TopicBase *topic);
 
   virtual ~TransportBase() = default;
 
 protected:
-  virtual bool routeInNormal(const MsgBase *msg, int from_tsp,
-                             int timeout_ms) = 0;
-  virtual bool routeInRequest(const MsgBase *msg, int from_tsp,
-                              int timeout_ms) = 0;
-  virtual bool routeInResponse(const MsgBase *msg, int from_tsp,
-                               int timeout_ms) = 0;
-  virtual bool routeInServiceBroadcast(const MsgBase *msg, int from_tsp,
-                                       int timeout_ms) = 0;
-  virtual bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
-                                       int timeout_ms) = 0;
+  void sendWork();
 
-  bool routeOut(const MsgBase *msg, int to_tsp = -1, int timeout_ms = -1);
+  void recvWork();
+
+  void recvNormal(const MsgBase *msg);
+  void recvRequest(const MsgBase *msg);
+  void recvResponse(const MsgBase *msg);
+  void recvServiceBroadcast(const MsgBase *msg);
+  void recvServiceDiscovery(const MsgBase *msg);
+
+  // thread safe
+  virtual int send(const void *data, size_t len, int prio,
+                   int timeout_ms = -1) = 0;
+
+  // thread safe
+  virtual int recv(void *data, size_t len, int *prio = nullptr,
+                   int timeout_ms = -1) = 0;
 
 protected:
   int32_t id_ = -1;
@@ -86,30 +69,16 @@ protected:
   uint32_t topic_bit_mask_ = 0;
   etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
   etl::array<ServiceBase *, UROS_MAX_SERVICES> services_{};
-};
 
-struct Router {
-  void addTransport(TransportBase *tsp);
+  std::unique_ptr<Thread> send_worker_;
+  std::unique_ptr<Thread> recv_worker_;
 
-  bool route(const MsgBase *msg, int from_tsp, int to_tsp = -1,
-             int timeout_ms = 0);
-
-protected:
-  bool routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
-                   int timeout_ms);
-  bool routeRequest(const MsgBase *msg, int from_tsp, int to_tsp,
-                    int timeout_ms);
-  bool routeResponse(const MsgBase *msg, int from_tsp, int to_tsp,
-                     int timeout_ms);
-  bool routeServiceBroadcast(const MsgBase *msg, int from_tsp, int to_tsp,
-                             int timeout_ms);
-  bool routeServiceDiscovery(const MsgBase *msg, int from_tsp, int to_tsp,
-                             int timeout_ms);
-
-  bool broadcast(const MsgBase *msg, int from_tsp, int timeout_ms);
-
-protected:
-  etl::vector<TransportBase *, UROS_MAX_TRANSPORT> transports_;
+  union Buffer {
+    MsgBase msg;
+    uint8_t data[UROS_MSG_MAX_SIZE];
+  };
+  Buffer send_buf_;
+  Buffer recv_buf_;
 };
 
 struct TransportLocal;
@@ -138,13 +107,12 @@ protected:
   void init();
 
 protected:
-  TransportManager();
+  TransportManager() = default;
   TransportManager(const TransportManager &other) = delete;
   TransportManager &operator=(const TransportManager &other) = delete;
 
 protected:
-  Router router_;
-  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORT> transports_;
+  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORTS> tsps_;
 };
 
 } // namespace uros
