@@ -11,6 +11,8 @@
 
 namespace uros {
 
+struct TransportBase;
+
 struct ServiceBase {
   ServiceBase(const char *name, int id, type_id_t req_type, type_id_t rsp_type,
               size_t req_size, size_t rsp_size)
@@ -31,7 +33,8 @@ struct ServiceBase {
 
   const bool serverPresent() const { return srvs_.size() > 0; }
 
-  virtual bool doCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) = 0;
+  virtual bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+                    int timeout_ms) = 0;
 
   virtual int writeReq(const MsgBase *req) = 0;
   virtual void writeRsp(const MsgBase *rsp) = 0;
@@ -67,12 +70,15 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   ServerT<Req, Rsp> *
   addServer(const std::function<void(const Req &, Rsp &)> &cb);
 
-  // interface with client
-  bool call(const Req &req, Rsp &rsp, int timeout_ms);
+  // call from client
+  bool call(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
 
-  // interface with transport
-  bool doCall(const Req &req, Rsp &rsp, int timeout_ms);
-  bool doCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) override;
+  // call from transport
+  bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+            int timeout_ms) override;
+
+  bool callLocal(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
+  bool callRemote(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
 
   // interface with server
   bool readReq(Req &req, int &ver); // server get request from service

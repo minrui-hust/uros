@@ -53,7 +53,7 @@ template <typename TMsg>
 int16_t TopicT<TMsg>::write(const TMsg &msg, TransportBase *from_tsp) {
   { // update msg in critical section
     LockGuard<CriticalLock> lg;
-    if (msg.__meta__.id.msg.seq - msg_.__meta__.id.msg.seq <= 0) {
+    if (int16_t(msg.__meta__.id.msg.seq - msg_.__meta__.id.msg.seq) <= 0) {
       return msg_.__meta__.id.msg.seq;
     }
     msg_ = msg;
@@ -81,7 +81,7 @@ int16_t TopicT<TMsg>::write(const MsgBase *msg, TransportBase *from_tsp) {
 
 template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int16_t &seq) {
   LockGuard<CriticalLock> lg;
-  if (msg_.__meta__.id.msg.seq - seq <= 0) {
+  if (int16_t(msg_.__meta__.id.msg.seq - seq) <= 0) {
     return false;
   }
   msg = msg_;

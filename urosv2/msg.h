@@ -16,7 +16,7 @@ struct __attribute__((packed)) ReqId {
   uint8_t system : 5;
   uint8_t service : 6;
   uint8_t client : 5;
-  uint8_t seq;
+  int8_t seq;
 };
 static_assert(sizeof(ReqId) == 3);
 

@@ -119,7 +119,8 @@ inline void TransportBase::recvWork() {
 }
 
 inline void TransportBase::recvNormal(const MsgBase *msg) {
-  UROS_PRINT("TransportBase::recvNormal, topic_id: %d\n", msg->__meta__.entry);
+  UROS_PRINT("TransportBase::recvNormal, topic_id: %d\n",
+             msg->__meta__.id.msg.topic);
   auto topic_id = msg->__meta__.id.msg.topic;
   if (topic_id >= topic_metas_.size() || !topic_metas_[topic_id]) {
     return;

@@ -5,7 +5,6 @@
 #include "client.h"
 #include "server.h"
 #include "service.h"
-#include "transport_local.h"
 
 namespace uros {
 
@@ -45,20 +44,29 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, int timeout_ms) {
-  return TransportManager::GetTransportLocal()->call(this, req, timeout_ms);
+bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, TransportBase *tsp,
+                              int timeout_ms) {
+  if (srvs_.size() > 0) {
+    return callLocal(req, rsp, tsp, timeout_ms);
+  } else {
+    return callRemote(req, rsp, tsp, timeout_ms);
+  }
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
-  if (srvs_.size() <= 0) { // no server registered
-    return false;
-  }
+bool ServiceT<Req, Rsp>::call(const MsgBase *req, MsgBase *rsp,
+                              TransportBase *tsp, int timeout_ms) {
+  return call(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), tsp,
+              timeout_ms);
+}
 
-  int64_t enter_ms = NowMilli();
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, TransportBase *tsp,
+                                   int timeout_ms) {
+  int64_t enter_ms = now_ms();
 
-  int timeout_now = etl::min(
-      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  int timeout_now =
+      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
 
   // take lock_req_, caused we only allow one access at same time
   LockGuard<Mutex> lg(lock_req_, timeout_now);
@@ -66,16 +74,30 @@ bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
   writeReq(req);
 
   // wait for response
-  timeout_now = etl::min(timeout_ms,
-                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  timeout_now =
+      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
 
   return waitRsp(rsp, timeout_now);
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::doCall(const MsgBase *req, MsgBase *rsp,
-                                int timeout_ms) {
-  return doCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), timeout_ms);
+bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp,
+                                    TransportBase *tsp, int timeout_ms) {
+  int64_t enter_ms = now_ms();
+
+  int timeout_now =
+      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
+
+  // take lock_req_, caused we only allow one access at same time
+  LockGuard<Mutex> lg(lock_req_, timeout_now);
+
+  // TODO: send req out
+
+  // wait for response
+  timeout_now =
+      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
+
+  return waitRsp(rsp, timeout_now);
 }
 
 template <typename Req, typename Rsp>
@@ -125,11 +147,11 @@ void ServiceT<Req, Rsp>::writeRsp(const MsgBase *rsp) {
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
-  int64_t enter_ms = NowMilli();
+  int64_t enter_ms = now_ms();
   bool rsp_ok = false;
   do {
     int timeout_now = etl::min(
-        timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+        timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
     if (!sem_rsp_.take(timeout_now)) {
       return false;
     }
