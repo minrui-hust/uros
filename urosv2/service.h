@@ -31,7 +31,10 @@ struct ServiceBase {
 
   const bool serverPresent() const { return srvs_.size() > 0; }
 
-  virtual bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) = 0;
+  virtual bool doCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) = 0;
+
+  virtual int writeReq(const MsgBase *req) = 0;
+  virtual void writeRsp(const MsgBase *rsp) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -48,6 +51,8 @@ protected:
   etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
   etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
 };
+
+struct TransportLocal;
 
 template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   using Req = TReq;
@@ -67,13 +72,22 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   // interface with transport
   bool doCall(const Req &req, Rsp &rsp, int timeout_ms);
-  bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) override;
+  bool doCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) override;
 
   // interface with server
   bool readReq(Req &req, int &ver); // server get request from service
-  void writeRsp(const Rsp &rsp);    // server write response to service
+
+  int writeReq(const Req &req);
+  int writeReq(const MsgBase *req) override;
+
+  void writeRsp(const Rsp &rsp); // server write response to service
+  void writeRsp(const MsgBase *rsp) override;
+
+  bool waitRsp(Rsp &rsp, int timeout_ms);
 
 protected:
+  friend TransportLocal;
+
   Mutex lock_req_;
   Req req_;
 

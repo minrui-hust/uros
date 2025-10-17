@@ -63,15 +63,69 @@ bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
   // take lock_req_, caused we only allow one access at same time
   LockGuard<Mutex> lg(lock_req_, timeout_now);
 
+  writeReq(req);
+
+  // wait for response
+  timeout_now = etl::min(timeout_ms,
+                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+
+  return waitRsp(rsp, timeout_now);
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::doCall(const MsgBase *req, MsgBase *rsp,
+                                int timeout_ms) {
+  return doCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), timeout_ms);
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
+  LockGuard<CriticalLock> lg;
+  if (req_version_ <= ver) {
+    return false;
+  }
+  req = req_;
+  ver = req_version_;
+  return true;
+}
+
+template <typename Req, typename Rsp>
+int ServiceT<Req, Rsp>::writeReq(const Req &req) {
+  int gen;
   { // update the request
     LockGuard<CriticalLock> lg;
     req_ = req;
-    ++req_version_;
+    gen = ++req_version_;
   }
 
-  // notify server, and wait for server do the work
-  srvs_[0]->notify();
+  if (srvs_[0]) {
+    srvs_[0]->notify();
+  }
+}
 
+template <typename Req, typename Rsp>
+int ServiceT<Req, Rsp>::writeReq(const MsgBase *req) {
+  return writeReq(*static_cast<Req *>(req));
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    rsp_ = rsp;
+    ++rsp_version_;
+  }
+  sem_rsp_.give();
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(const MsgBase *rsp) {
+  writeRsp(*static_cast<Rsp *>(rsp));
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
+  int64_t enter_ms = NowMilli();
   bool rsp_ok = false;
   do {
     int timeout_now = etl::min(
@@ -94,33 +148,6 @@ bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
   } while (!rsp_ok);
 
   return true;
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::recvCall(const MsgBase *req, MsgBase *rsp,
-                                  int timeout_ms) {
-  return doCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), timeout_ms);
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
-  LockGuard<CriticalLock> lg;
-  if (req_version_ <= ver) {
-    return false;
-  }
-  req = req_;
-  ver = req_version_;
-  return true;
-}
-
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
-  { // update the request
-    LockGuard<CriticalLock> lg;
-    rsp_ = rsp;
-    ++rsp_version_;
-  }
-  sem_rsp_.give();
 }
 
 template <typename Service>

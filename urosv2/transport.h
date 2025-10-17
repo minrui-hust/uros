@@ -16,8 +16,7 @@ struct ServiceBase;
 struct Router;
 
 struct TopicMeta {
-  TopicBase *topic = nullptr;
-
+  TopicBase *topic;
   // simple ring buffer with depth 2
   int wr = 0;
   int rd = 0;
@@ -26,6 +25,11 @@ struct TopicMeta {
 
 struct ServiceMeta {
   ServiceBase *service = nullptr;
+  etl::unique_ptr<Mutex> lock_req;
+  etl::unique_ptr<MsgBase> req;
+
+  etl::unique_ptr<BinarySemaphore> sem_rsp;
+  etl::unique_ptr<MsgBase> rsp;
   int dist = -1;
 };
 
@@ -78,8 +82,8 @@ protected:
   int32_t id_ = -1;
   Router *router_ = nullptr;
   uint32_t topic_bit_mask_ = 0;
-  etl::array<TopicMeta, UROS_MAX_TOPICS> topic_metas_;       // TODO: init
-  etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_; // TODO: init
+  etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
+  etl::array<ServiceBase *, UROS_MAX_SERVICES> services_{};
 };
 
 struct Router {

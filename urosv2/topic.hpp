@@ -73,7 +73,7 @@ template <typename TMsg> int TopicT<TMsg>::doWrite(const TMsg &msg) {
   return gen;
 }
 
-template <typename TMsg> int TopicT<TMsg>::recvWrite(const MsgBase *msg) {
+template <typename TMsg> int TopicT<TMsg>::doWrite(const MsgBase *msg) {
   return doWrite(*static_cast<const TMsg *>(msg));
 }
 

@@ -32,7 +32,7 @@ struct TopicBase {
     return generation_;
   }
 
-  virtual int recvWrite(const MsgBase *msg) = 0;
+  virtual int doWrite(const MsgBase *msg) = 0;
 
   virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
@@ -69,7 +69,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
 
   // interface for transport
   int doWrite(const TMsg &msg);
-  int recvWrite(const MsgBase *msg) override;
+  int doWrite(const MsgBase *msg) override;
 
   etl::unique_ptr<MsgBase> createMsg() const override;
 

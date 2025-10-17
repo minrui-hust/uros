@@ -27,7 +27,9 @@ protected:
   bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
                                int timeout_ms) override;
 
-  bool remoteCall(const MsgBase *req, MsgBase *rsp, int timeout_ms);
+  template <typename Service>
+  bool remoteCall(Service *service, const typename Service::Req &req,
+                  typename Service::Rsp &rsp, int timeout_ms);
 };
 
 } // namespace uros

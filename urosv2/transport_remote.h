@@ -44,11 +44,10 @@ protected:
     MsgBase msg;
     uint8_t data[UROS_MSG_MAX_SIZE];
   };
+  Buffer recv_buf_;
 
   std::unique_ptr<Thread> send_worker_;
-
   std::unique_ptr<Thread> recv_worker_;
-  Buffer recv_buf_;
 };
 
 } // namespace uros

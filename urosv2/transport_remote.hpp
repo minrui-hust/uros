@@ -27,21 +27,21 @@ inline bool TransportRemote::routeInNormal(const MsgBase *msg, int from_tsp,
   }
 
   auto &meta = topic_metas_[topic_id];
-  if (!meta.topic) {
+  if (!meta) {
     return false;
   }
 
   bool pended = false;
   {
     LockGuard<CriticalLock> lg;
-    bool full = (meta.wr - meta.rd) >= 2;
-    bool empty = meta.wr == meta.rd;
+    bool full = (meta->wr - meta->rd) >= 2;
+    bool empty = meta->wr == meta->rd;
 
-    uint8_t diff = msg->__meta__.seq - meta.msgs[(meta.wr - 1) & 1];
+    uint8_t diff = msg->__meta__.seq - meta->msgs[(meta->wr - 1) & 1];
     bool drop = !empty && (diff > 0 && diff < 128);
 
     if (!full && !drop) {
-      memcpy(meta.msgs[(meta.wr++) & 1].get(), msg, meta.topic->msgSize());
+      memcpy(meta->msgs[(meta->wr++) & 1].get(), msg, meta->topic->msgSize());
       pended = true;
     }
   }
@@ -110,19 +110,19 @@ inline void TransportRemote::sendWork() {
         int rd_ptr;
         { // get empty state and read ptr
           LockGuard<CriticalLock> lg;
-          if (meta.rd == meta.wr) {
+          if (meta->rd == meta->wr) {
             continue;
           }
-          rd_ptr = meta.rd = meta.wr - 1; // only keep the latest data
+          rd_ptr = meta->rd = meta->wr - 1; // only keep the latest data
         }
 
         // blocking send
-        send(meta.msgs[rd_ptr & 1].get(), meta.topic->msgSize(),
-             meta.topic->prio(), -1);
+        send(meta->msgs[rd_ptr & 1].get(), meta->topic->msgSize(),
+             meta->topic->prio(), -1);
 
         { // update read ptr
           LockGuard<CriticalLock> lg;
-          ++meta.rd;
+          ++meta->rd;
         }
       }
     }

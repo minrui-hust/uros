@@ -18,12 +18,17 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
     return false;
   }
 
-  auto &topic_meta = topic_metas_[topic_id];
-  topic_meta.topic = topic;
-  topic_meta.msgs[0] = topic->createMsg();
-  topic_meta.msgs[1] = topic->createMsg();
+  auto &meta = topic_metas_[topic_id];
+  if (meta) {
+    UROS_PRINT("topic '%s' already declared on transport %d \n", topic_name,
+               id_);
+    return false;
+  }
 
-  topic_bit_mask_ |= 1 << topic_id;
+  meta.reset(new TopicMeta);
+  meta->topic = topic;
+  meta->msgs[0] = topic->createMsg();
+  meta->msgs[1] = topic->createMsg();
 
   UROS_PRINT("add topic '%s' to transport %d succeed\n", topic_name, id_);
 
@@ -31,21 +36,26 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
 }
 
 inline bool TransportBase::declareService(const char *service_name) {
+  // find service by name
   auto service = ServiceManager::FindService<ServiceBase>(service_name);
   if (!service) {
     return false;
   }
 
+  // check if service id exceed limit
   auto service_id = service->id();
-  if ((size_t)service_id >= service_metas_.size()) {
+  if ((size_t)service_id >= services_.size()) {
     return false;
   }
 
-  auto &service_meta = service_metas_[service_id];
-  service_meta.service = service;
-  // TODO: more
+  if (!services_[service_id]) {
+    services_[service_id] = service; // register service
+  } else {
+    UROS_PRINT("service '%s' already declared on transport %d \n", service_name,
+               id_);
+  }
 
-  UROS_PRINT("add service '%s' to transport %d succeed\n", topic_name, id_);
+  UROS_PRINT("add service '%s' to transport %d succeed\n", service_name, id_);
 
   return true;
 }
@@ -68,7 +78,8 @@ inline bool TransportBase::routeIn(const MsgBase *msg, int from_tsp,
   }
 }
 
-bool TransportBase::routeOut(const MsgBase *msg, int to_tsp, int timeout_ms) {
+inline bool TransportBase::routeOut(const MsgBase *msg, int to_tsp,
+                                    int timeout_ms) {
   return router_->route(msg, id_, to_tsp, timeout_ms);
 }
 

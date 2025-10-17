@@ -1,5 +1,6 @@
 #pragma once
 
+#include "service.h"
 #include "transport_local.h"
 
 namespace uros {
@@ -12,24 +13,50 @@ inline bool TransportLocal::routeInNormal(const MsgBase *msg, int from_tsp,
     return false;
   }
 
-  auto &topic_meta = topic_metas_[topic_id];
-  if (!topic_meta.topic) {
+  auto &meta = topic_metas_[topic_id];
+  if (!meta) {
     return false;
   }
 
-  topic_meta.topic->recvWrite(msg);
+  meta->topic->doWrite(msg);
 
   return true;
 }
 
 inline bool TransportLocal::routeInRequest(const MsgBase *msg, int from_tsp,
                                            int timeout_ms) {
-  return false; // TODO
+  auto service_id = msg->__meta__.entry;
+  if (service_id >= services_.size()) {
+    return false;
+  }
+
+  auto service = services_[service_id];
+  if (!service || !service->serverPresent()) {
+    return false;
+  }
+
+  if (!service->doCall(msg, rsp, timeout_ms)) {
+    return false;
+  }
+
+  return routeOut(rsp, -1, timeout_ms);
 }
 
 inline bool TransportLocal::routeInResponse(const MsgBase *msg, int from_tsp,
                                             int timeout_ms) {
-  return false; // TODO
+  auto service_id = msg->__meta__.entry;
+  if (service_id >= services_.size()) {
+    return false;
+  }
+
+  auto service = services_[service_id];
+  if (!service) {
+    return false;
+  }
+
+  service->writeRsp(msg);
+
+  return true;
 }
 
 inline bool TransportLocal::routeInServiceBroadcast(const MsgBase *msg,
@@ -58,13 +85,36 @@ bool TransportLocal::call(Service *service, const typename Service::Req &req,
   if (service->serverPresent()) {
     return service->doCall(req, rsp, timeout_ms);
   } else {
-    return remoteCall(&req, &rsp, timeout_ms);
+    return remoteCall(service, &req, &rsp, timeout_ms);
   }
 }
 
-inline bool TransportLocal::remoteCall(const MsgBase *req, MsgBase *rsp,
-                                       int timeout_ms) {
-  return false; // TODO
+template <typename Service>
+bool TransportLocal::remoteCall(Service *service,
+                                const typename Service::Req &req,
+                                typename Service::Rsp &rsp, int timeout_ms) {
+  auto service_id = service->__meta__.entry;
+  if (service_id < 0 || service_id >= services_.size() ||
+      service != services_[service_id]) {
+    return false;
+  }
+
+  int64_t enter_ms = NowMilli();
+
+  int timeout_now = etl::min(
+      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  LockGuard<Mutex> lg(service->lock_req_, timeout_now);
+
+  timeout_now = etl::min(timeout_ms,
+                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+  if (!routeOut(req, -1, timeout_now)) {
+    return false;
+  }
+
+  timeout_now = etl::min(timeout_ms,
+                         etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+
+  return service->waitRsp(rsp, timeout_ms);
 }
 
 } // namespace uros
