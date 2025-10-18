@@ -15,7 +15,7 @@ struct ServiceBase;
 
 struct TopicMeta {
   TopicBase *topic = nullptr;
-  int16_t seq = -1;
+  int seq = -1;
 };
 
 struct ServiceMeta {

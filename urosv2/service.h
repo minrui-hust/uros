@@ -47,8 +47,8 @@ struct ServiceBase {
 
   virtual void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) = 0;
 
-  virtual void writeServiceBroadcast(TransportBase *tsp,
-                                     const ServiceBroadcast &sbc) = 0;
+  // virtual void writeServiceBroadcast(TransportBase *tsp,
+  //                                    const ServiceBroadcast &sbc) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -104,8 +104,8 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   TransportBase *findRoute(TransportBase *from_tsp);
 
-  void writeServiceBroadcast(TransportBase *tsp,
-                             const ServiceBroadcast &sbc) override;
+  // void writeServiceBroadcast(TransportBase *tsp,
+  //                            const ServiceBroadcast &sbc) override;
 
 protected:
   friend TransportLocal;

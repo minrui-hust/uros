@@ -71,7 +71,7 @@ int main() {
     talker_pub->publish(hello);
     ++hello.seq;
 
-    std::this_thread::sleep_for(1000ms);
+    std::this_thread::sleep_for(1ms);
   }
 
   return 0;

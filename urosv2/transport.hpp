@@ -26,7 +26,7 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
 
   meta.reset(new TopicMeta);
   meta->topic = topic;
-  topic->addTransport(this);
+  topic->registerTransport(this);
 
   topic_bit_mask_ |= 1 << topic_id;
 
@@ -57,7 +57,7 @@ inline bool TransportBase::declareService(const char *service_name) {
 
   meta.reset(new ServiceMeta);
   meta->service = service;
-  service->addTransport(this);
+  service->registerTransport(this);
 
   UROS_PRINT("add service '%s' to transport %d succeed\n", service_name, id_);
 
@@ -151,7 +151,7 @@ inline void TransportBase::recvNormal(const MsgBase *msg) {
 
   auto &meta = topic_metas_[topic_id];
 
-  meta->topic->write(msg, this);
+  meta->topic->write(this, msg);
 }
 
 inline void TransportBase::recvRequest(const MsgBase *msg) {

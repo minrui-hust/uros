@@ -6,15 +6,22 @@
 
 #include "publisher.h"
 #include "subscription.h"
+#include "transport.h"
 
 namespace uros {
 
-inline bool TopicBase::addTransport(TransportBase *tsp) {
-  if (tsps_.full()) {
+inline bool TopicBase::registerTransport(TransportBase *tsp) {
+  auto tsp_id = tsp->id();
+  if (tsp_id > tsps_.size()) {
     return false;
   }
 
-  tsps_.emplace_back(tsp);
+  if (tsps_[tsp_id]) {
+    UROS_PRINT("tsp '%d' already register on topic %d \n", tsp_id, id_);
+    return false;
+  }
+
+  tsps_[tsp_id] = tsp;
 
   return true;
 }
@@ -50,15 +57,46 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
 }
 
 template <typename TMsg>
-int16_t TopicT<TMsg>::write(const TMsg &msg, TransportBase *from_tsp) {
-  { // update msg in critical section
-    LockGuard<CriticalLock> lg;
-    if (int16_t(msg.__meta__.id.msg.seq - msg_.__meta__.id.msg.seq) <= 0) {
-      return msg_.__meta__.id.msg.seq;
-    }
-    msg_ = msg;
-  }
+int TopicT<TMsg>::write(PublisherBase *pub, const TMsg &msg) {
+  static int seq = 0;
+  msg.__meta__.type = MsgTypeNormal;
+  msg.__meta__.id.msg.topic = id_;
+  auto ret = update(msg, seq++);
+  notify(nullptr);
+  return ret;
+}
 
+template <typename TMsg>
+int TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
+  auto ret = update(*static_cast<const TMsg *>(msg), msg->__meta__.id.msg.seq);
+  notify(tsp);
+  return ret;
+}
+
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &seq) {
+  LockGuard<CriticalLock> lg;
+  if (int16_t(msg_.__meta__.id.msg.seq - seq) > 0) {
+    msg = msg_;
+    seq = msg_.__meta__.id.msg.seq;
+    return true;
+  }
+  return false;
+}
+
+template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int &seq) {
+  return read(*static_cast<TMsg *>(msg), seq);
+}
+
+template <typename TMsg> int TopicT<TMsg>::update(const TMsg &msg, int seq) {
+  LockGuard<CriticalLock> lg;
+  if (int16_t(seq - msg_.__meta__.id.msg.seq) > 0) {
+    msg_ = msg;
+    msg_.__meta__.id.msg.seq = seq;
+  }
+  return msg_.__meta__.id.msg.seq;
+}
+
+template <typename TMsg> void TopicT<TMsg>::notify(TransportBase *from_tsp) {
   // first notify subs, cause higher prior work may waken
   for (auto &sub : subs_) {
     sub->notify();
@@ -66,31 +104,10 @@ int16_t TopicT<TMsg>::write(const TMsg &msg, TransportBase *from_tsp) {
 
   // then notify tsps
   for (auto &tsp : tsps_) {
-    if (tsp != from_tsp) {
+    if (tsp && tsp != from_tsp) {
       tsp->notify(this);
     }
   }
-
-  return msg.__meta__.id.msg.seq;
-}
-
-template <typename TMsg>
-int16_t TopicT<TMsg>::write(const MsgBase *msg, TransportBase *from_tsp) {
-  return write(*static_cast<const TMsg *>(msg), from_tsp);
-}
-
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int16_t &seq) {
-  LockGuard<CriticalLock> lg;
-  if (int16_t(msg_.__meta__.id.msg.seq - seq) <= 0) {
-    return false;
-  }
-  msg = msg_;
-  seq = msg_.__meta__.id.msg.seq;
-  return true;
-}
-
-template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int16_t &seq) {
-  return read(*static_cast<TMsg *>(msg), seq);
 }
 
 template <typename Topic>

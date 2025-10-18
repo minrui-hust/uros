@@ -17,6 +17,12 @@ struct __attribute__((packed)) MsgId {
 };
 static_assert(sizeof(MsgId) == 3);
 
+struct __attribute__((packed)) SrvBcId {
+  uint8_t service;
+  uint8_t dist;
+  int8_t seq;
+};
+
 struct __attribute__((packed)) ReqId {
   uint8_t system : 5;
   uint8_t service : 6;
@@ -26,11 +32,6 @@ struct __attribute__((packed)) ReqId {
 static_assert(sizeof(ReqId) == 3);
 
 using RspId = ReqId;
-
-struct __attribute__((packed)) SrvBcId {
-  uint8_t service;
-  int16_t seq;
-};
 
 // all message should derived from this
 struct __attribute__((packed)) MsgMeta {
@@ -48,10 +49,5 @@ static_assert(sizeof(MsgMeta) == 4);
 struct MsgBase {
   mutable MsgMeta __meta__; // for internal usage only
 };
-
-struct __attribute__((packed)) ServiceBroadcast : MsgBase {
-  int32_t dist;
-};
-static_assert(sizeof(ServiceBroadcast) == 8);
 
 } // namespace uros
