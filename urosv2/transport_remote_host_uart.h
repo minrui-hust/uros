@@ -1,6 +1,7 @@
 #pragma once
 #include <unistd.h>
 
+#include "packer.h"
 #include "transport_remote.h"
 
 namespace uros {
@@ -20,6 +21,11 @@ struct TransportRemoteHostUart : public TransportRemote {
 
 private:
   int fd_ = 0;
+  static const uint16_t MAX_SIZE = 512;
+  uint8_t recv_buf_[MAX_SIZE] = {0};
+  uint8_t send_buf_[MAX_SIZE] = {0};
+
+  PacketParser packer_;
 };
 
 } // namespace uros

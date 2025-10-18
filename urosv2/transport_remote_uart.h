@@ -2,6 +2,7 @@
 
 #include "uart.h"
 
+#include "packer.h"
 #include "transport_remote.h"
 
 namespace uros {
@@ -21,6 +22,11 @@ struct TransportRemoteUart : public TransportRemote {
 
 private:
   Uart *uart_;
+  static const uint16_t MAX_SIZE = 512;
+  uint8_t recv_buf_[MAX_SIZE] = {0};
+  uint8_t send_buf_[MAX_SIZE] = {0};
+
+  PacketParser packer_;
 };
 
 } // namespace uros

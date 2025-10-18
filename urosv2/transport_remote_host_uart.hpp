@@ -47,16 +47,29 @@ inline void TransportRemoteHostUart::initHostUart() {
 inline int TransportRemoteHostUart::send(const void *data, size_t len, int prio,
                                          int timeout_ms) {
   UROS_PRINT("transport_remote_socket.send: %zu\n", len);
-  return write(fd_, data, len);
+  //封包
+  uint32_t packer_size =
+      packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
+  return write(fd_, send_buf_, packer_size);
 }
 
 inline int TransportRemoteHostUart::recv(void *data, size_t len, int *prio,
                                          int timeout_ms) {
 
-  int received = read(fd_, data, len);
+  int received = read(fd_, recv_buf_, len);
+
+  //解包
+  uint32_t ret_len = 0;
+  for (uint16_t i = 0; i < received; i++) {
+    if (packer_.processByte(recv_buf_[i])) {
+      memcpy(data, packer_.packet_buffer_, packer_.expected_length_);
+      ret_len = packer_.expected_length_;
+      packer_.reset();
+    }
+  }
 
   UROS_PRINT("transport_remote_socket.recv: %d\n", received);
-  return received;
+  return ret_len;
 }
 
 } // namespace uros

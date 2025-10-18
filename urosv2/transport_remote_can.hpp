@@ -16,7 +16,7 @@ inline void TransportRemoteCan::initCan(const char *can_name, int can_id) {
 inline int TransportRemoteCan::send(const void *data, size_t len, int prio,
                                     int timeout_ms) {
   UROS_PRINT("transport_remote_socket.send: %zu\n", len);
-
+  prio = (prio > 0x7ff) ? 0x7ff : prio;
   return can_->send((void *)data, len, prio, timeout_ms);
 }
 
