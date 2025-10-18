@@ -1,5 +1,7 @@
 #pragma once
 
+#include <climits>
+
 #include "etl/vector.h"
 
 #include "platform.h"
@@ -12,6 +14,11 @@
 namespace uros {
 
 struct TransportBase;
+
+struct TransportMeta {
+  TransportBase *tsp = nullptr;
+  int dist = INT_MAX;
+};
 
 struct ServiceBase {
   ServiceBase(const char *name, int id, type_id_t req_type, type_id_t rsp_type,
@@ -36,8 +43,7 @@ struct ServiceBase {
   virtual bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
                     int timeout_ms) = 0;
 
-  virtual int writeReq(const MsgBase *req) = 0;
-  virtual void writeRsp(const MsgBase *rsp) = 0;
+  virtual void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -49,10 +55,11 @@ protected:
   size_t req_size_;
   size_t rsp_size_;
   int req_version_ = -1;
-  int rsp_version_ = -1;
 
   etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
   etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
+
+  etl::array<etl::unique_ptr<TransportMeta>, UROS_MAX_TRANSPORTS> tsp_metas_{};
 };
 
 struct TransportLocal;
@@ -81,13 +88,13 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   bool callRemote(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
 
   // interface with server
-  bool readReq(Req &req, int &ver); // server get request from service
+  bool readReq(Req &req, int &ver);
+  bool sendReq(const Req &req, TransportBase *from_tsp, int timeout_ms);
 
   int writeReq(const Req &req);
-  int writeReq(const MsgBase *req) override;
 
-  void writeRsp(const Rsp &rsp); // server write response to service
-  void writeRsp(const MsgBase *rsp) override;
+  void writeRsp(const Rsp &rsp, TransportBase *from_tsp);
+  void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) override;
 
   bool waitRsp(Rsp &rsp, int timeout_ms);
 

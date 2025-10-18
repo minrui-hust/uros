@@ -12,7 +12,6 @@ namespace uros {
 
 struct TopicBase;
 struct ServiceBase;
-struct Router;
 
 struct TopicMeta {
   TopicBase *topic = nullptr;
@@ -21,12 +20,7 @@ struct TopicMeta {
 
 struct ServiceMeta {
   ServiceBase *service = nullptr;
-  etl::unique_ptr<Mutex> lock_req;
-  etl::unique_ptr<MsgBase> req;
-
-  etl::unique_ptr<BinarySemaphore> sem_rsp;
-  etl::unique_ptr<MsgBase> rsp;
-  int dist = -1;
+  // TODO: maybe more
 };
 
 struct TransportBase {
@@ -40,7 +34,11 @@ struct TransportBase {
 
   void init();
 
-  void notify(TopicBase *topic);
+  template <typename Topic> void notify(Topic *topic);
+
+  template <typename Service>
+  bool sendReq(Service *service, const typename Service::Req &req,
+               int timeout_ms);
 
   virtual ~TransportBase() = default;
 
@@ -49,11 +47,11 @@ protected:
 
   void recvWork();
 
+  void serviceWork();
+
   void recvNormal(const MsgBase *msg);
   void recvRequest(const MsgBase *msg);
   void recvResponse(const MsgBase *msg);
-  void recvServiceBroadcast(const MsgBase *msg);
-  void recvServiceDiscovery(const MsgBase *msg);
 
   // thread safe
   virtual int send(const void *data, size_t len, int prio,
@@ -65,13 +63,14 @@ protected:
 
 protected:
   int32_t id_ = -1;
-  Router *router_ = nullptr;
   uint32_t topic_bit_mask_ = 0;
+
   etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
-  etl::array<ServiceBase *, UROS_MAX_SERVICES> services_{};
+  etl::array<etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES> service_metas_{};
 
   std::unique_ptr<Thread> send_worker_;
   std::unique_ptr<Thread> recv_worker_;
+  std::unique_ptr<Thread> service_worker_;
 
   union Buffer {
     MsgBase msg;
@@ -79,17 +78,15 @@ protected:
   };
   Buffer send_buf_;
   Buffer recv_buf_;
-};
 
-struct TransportLocal;
+  MessageBuffer req_queue_{UROS_TRANSPORT_REQ_QUEUE_SIZE};
+  Buffer req_buf_;
+  Buffer rsp_buf_;
+};
 
 struct TransportManager {
   template <typename Transport> static Transport *AddTransport() {
     return Instance().addTransport<Transport>();
-  }
-
-  static TransportLocal *GetTransportLocal() {
-    return Instance().getTransportLocal();
   }
 
   static void Init() { return Instance().init(); }
@@ -101,8 +98,6 @@ protected:
   }
 
   template <typename Transport> Transport *addTransport();
-
-  TransportLocal *getTransportLocal();
 
   void init();
 

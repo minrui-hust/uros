@@ -8,9 +8,15 @@ enum MsgType {
   MsgTypeNormal = 0,
   MsgTypeRequest = 1,
   MsgTypeResponse = 2,
-  MsgTypeServiceBroadcast = 3,
-  MsgTypeServiceDiscovery = 4,
-}; // this should be 1 bytes
+};
+
+// struct __attribute__((packed)) ReqId {
+//   uint8_t system : 5;
+//   uint8_t service : 6;
+//   uint8_t client : 5;
+//   int8_t seq;
+// };
+// static_assert(sizeof(ReqId) == 3);
 
 struct __attribute__((packed)) ReqId {
   uint8_t system : 5;
@@ -20,7 +26,13 @@ struct __attribute__((packed)) ReqId {
 };
 static_assert(sizeof(ReqId) == 3);
 
-using RspId = ReqId;
+struct __attribute__((packed)) RspId {
+  uint8_t system : 5;
+  uint8_t service : 6;
+  uint8_t client : 5;
+  uint8_t dist;
+};
+static_assert(sizeof(ReqId) == 3);
 
 struct __attribute__((packed)) MsgId {
   uint8_t topic;

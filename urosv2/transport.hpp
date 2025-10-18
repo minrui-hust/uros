@@ -44,16 +44,20 @@ inline bool TransportBase::declareService(const char *service_name) {
 
   // check if service id exceed limit
   auto service_id = service->id();
-  if ((size_t)service_id >= services_.size()) {
+  if ((size_t)service_id >= service_metas_.size()) {
     return false;
   }
 
-  if (!services_[service_id]) {
-    services_[service_id] = service; // register service
-  } else {
+  auto &meta = service_metas_[service_id];
+  if (meta) {
     UROS_PRINT("service '%s' already declared on transport %d \n", service_name,
                id_);
+    return false;
   }
+
+  meta.reset(new ServiceMeta);
+  meta->service = service;
+  service->addTransport(this);
 
   UROS_PRINT("add service '%s' to transport %d succeed\n", service_name, id_);
 
@@ -62,18 +66,30 @@ inline bool TransportBase::declareService(const char *service_name) {
 
 inline void TransportBase::init() {
   send_worker_ = std::make_unique<Thread>(
-      "transport_send_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
+      "tsp_send_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
       UROS_TRANSPORT_WORKER_PRIORITY, [&]() { sendWork(); });
   CHECK(send_worker_);
 
   recv_worker_ = std::make_unique<Thread>(
-      "transport_recv_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
+      "tsp_recv_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
       UROS_TRANSPORT_WORKER_PRIORITY, [&]() { recvWork(); });
   CHECK(recv_worker_);
+
+  service_worker_ = std::make_unique<Thread>(
+      "tsp_service_worker", UROS_TRANSPORT_WORKER_STACK_DEPTH,
+      UROS_TRANSPORT_WORKER_PRIORITY, [&]() { serviceWork(); });
+  CHECK(service_worker_);
 }
 
-inline void TransportBase::notify(TopicBase *topic) {
+template <typename Topic> void TransportBase::notify(Topic *topic) {
   ThreadNotify(send_worker_.get(), 1 << topic->id());
+}
+
+template <typename Service>
+bool TransportBase::sendReq(Service *service, const typename Service::Req &req,
+                            int timeout_ms) {
+  // just call low-level send
+  return send(&req, sizeof(Service::Req), 0, timeout_ms);
 }
 
 inline void TransportBase::sendWork() {
@@ -108,12 +124,18 @@ inline void TransportBase::recvWork() {
       recvRequest(msg);
     } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
       recvResponse(msg);
-    } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
-      recvServiceBroadcast(msg);
-    } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
-      recvServiceDiscovery(msg);
     } else {
       UROS_PRINT("Unknow msg type: %d\n", msg->__meta__.type);
+    }
+  }
+}
+
+inline void TransportBase::serviceWork() {
+  while (true) {
+    auto len = req_queue_.recv(req_buf_.data, sizeof(req_buf_), -1);
+    auto &meta = service_metas_[req_buf_.msg.__meta__.id.req.service];
+    if (meta->service->call(&req_buf_.msg, &rsp_buf_.msg, this, 1000)) {
+      send(rsp_buf_.data, meta->service->rspSize(), -1); // TODO: timeout
     }
   }
 }
@@ -123,6 +145,7 @@ inline void TransportBase::recvNormal(const MsgBase *msg) {
              msg->__meta__.id.msg.topic);
   auto topic_id = msg->__meta__.id.msg.topic;
   if (topic_id >= topic_metas_.size() || !topic_metas_[topic_id]) {
+    UROS_PRINT("Invalid msg\n");
     return;
   }
 
@@ -132,19 +155,30 @@ inline void TransportBase::recvNormal(const MsgBase *msg) {
 }
 
 inline void TransportBase::recvRequest(const MsgBase *msg) {
-  // TODO
+  auto service_id = msg->__meta__.id.req.service;
+  if (service_id >= service_metas_.size() || !service_metas_[service_id]) {
+    return;
+  }
+
+  auto &meta = service_metas_[service_id];
+
+  if (!req_queue_.send(msg, meta->service->reqSize(), 0)) {
+    UROS_PRINT("transport request queue overflow, drop request\n");
+  }
 }
 
 inline void TransportBase::recvResponse(const MsgBase *msg) {
-  // TODO
-}
+  UROS_PRINT("TransportBase::recvResponse, service_id: %d\n",
+             msg->__meta__.id.rsp.service);
+  auto service_id = msg->__meta__.id.rsp.service;
+  if (service_id >= service_metas_.size() || !service_metas_[service_id]) {
+    UROS_PRINT("Invalid response\n");
+    return;
+  }
 
-inline void TransportBase::recvServiceBroadcast(const MsgBase *msg) {
-  // TODO
-}
+  auto &meta = service_metas_[service_id];
 
-inline void TransportBase::recvServiceDiscovery(const MsgBase *msg) {
-  // TODO
+  meta->service->writeRsp(msg, this);
 }
 
 template <typename Transport> Transport *TransportManager::addTransport() {
