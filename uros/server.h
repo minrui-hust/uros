@@ -4,25 +4,27 @@
 
 namespace uros {
 
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ServiceT;
+template <typename TReq, typename TRsp> struct ServiceT;
 
 struct ServerBase : SubscriptionBase {
-  ServerBase(EventGroup *evt, int32_t idx) : SubscriptionBase(evt, idx) {}
+  ServerBase(int id) : SubscriptionBase(id) {}
+
+  virtual ~ServerBase() = default;
 };
 
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ServerT : ServerBase {
-  using Service = ServiceT<TransportManager, TReq, TRsp>;
+template <typename TReq, typename TRsp> struct ServerT : ServerBase {
+  using Service = ServiceT<TReq, TRsp>;
 
-  ServerT(EventGroup *evt, int idx) : ServerBase(evt, idx) {}
+  ServerT(int id) : ServerBase(id) {}
 
-  bool serve(Service *service,
-             const std::function<void(const TReq &, TRsp &)> &cb);
+  bool bind(Service *service,
+            const std::function<void(const TReq &, TRsp &)> &cb);
 
   void spinOnce() override;
 
 protected:
+  TReq req_;
+  TRsp rsp_;
   Service *service_;
   std::function<void(const TReq &, TRsp &)> cb_;
 };

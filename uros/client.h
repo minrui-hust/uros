@@ -1,17 +1,24 @@
 #pragma once
 
-#include "subscription.h"
+#include <cstdint>
 
 namespace uros {
 
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ServiceT;
+template <typename TReq, typename TRsp> struct ServiceT;
 
-struct ClientBase {};
+struct ClientBase {
+  ClientBase(int id) : id_(id) {}
 
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ClientT : ClientBase {
-  using Service = ServiceT<TransportManager, TReq, TRsp>;
+  virtual ~ClientBase() = default;
+
+protected:
+  int id_;
+};
+
+template <typename TReq, typename TRsp> struct ClientT : ClientBase {
+  using Service = ServiceT<TReq, TRsp>;
+
+  ClientT(int id) : ClientBase(id) {}
 
   void connect(Service *service);
 
@@ -19,7 +26,7 @@ struct ClientT : ClientBase {
 
 protected:
   Service *service_;
-  std::function<void(const TReq &, TRsp &)> cb_;
+  int8_t seq_;
 };
 
 } // namespace uros

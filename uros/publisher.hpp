@@ -1,19 +1,16 @@
 #pragma once
 
 #include "publisher.h"
+#include "topic.h"
 
 namespace uros {
 
-template <typename TransportManager, typename TMsg>
-void PublisherT<TransportManager, TMsg>::advertise(
-    TopicT<TransportManager, TMsg> *topic) {
+template <typename Msg> void PublisherT<Msg>::advertise(TopicT<Msg> *topic) {
   topic_ = topic;
 }
 
-template <typename TransportManager, typename TMsg>
-void PublisherT<TransportManager, TMsg>::publish(const TMsg &msg) {
-  // TODO: __id__
-  topic_->write(msg);
+template <typename TMsg> void PublisherT<TMsg>::publish(const TMsg &msg) {
+  topic_->write(this, msg);
 }
 
 } // namespace uros

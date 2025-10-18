@@ -12,8 +12,8 @@ void ClientT<TReq, TRsp>::connect(Service *service) {
 
 template <typename TReq, typename TRsp>
 bool ClientT<TReq, TRsp>::call(const TReq &req, TRsp &rsp, int timeout_ms) {
-  req.__meta__.type = MsgTypeRequest;
-  req.__meta__.id.req.client = id_;
+  req.__id__.participant = id_;
+  req.__id__.type = MsgTypeRequest;
   return service_->call(req, rsp, timeout_ms);
 }
 

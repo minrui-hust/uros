@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 namespace uros {
 
 template <typename TReq, typename TRsp> struct ServiceT;
@@ -26,7 +24,6 @@ template <typename TReq, typename TRsp> struct ClientT : ClientBase {
 
 protected:
   Service *service_;
-  int8_t seq_;
 };
 
 } // namespace uros

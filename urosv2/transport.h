@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <tuple>
 
 #include "etl/vector.h"
 
@@ -12,81 +13,108 @@ namespace uros {
 
 struct TopicBase;
 struct ServiceBase;
+struct Router;
 
 struct TopicMeta {
   TopicBase *topic = nullptr;
-  int seq = -1;
+
+  // simple ring buffer with depth 2
+  int wr = 0;
+  int rd = 0;
+  etl::unique_ptr<MsgBase> msgs[2];
 };
 
 struct ServiceMeta {
   ServiceBase *service = nullptr;
-  // TODO: maybe more
+  int dist = -1;
+};
+
+struct RequestInfo {
+  int tsp_in;            // which transport this request come from
+  uint32_t req_id;       // unique global identifier of an request
+  int64_t deadline = -1; // after deadline, request is treat as invalid
 };
 
 struct TransportBase {
-
-  auto &id() { return id_; }
-  const auto &id() const { return id_; }
 
   bool declareTopic(const char *topic_name);
 
   bool declareService(const char *service_name);
 
-  void init();
+  TransportBase &setId(int id) {
+    id_ = id;
+    return *this;
+  }
 
-  template <typename Topic> void notify(Topic *topic);
+  TransportBase &setRouter(Router *router) {
+    router_ = router;
+    return *this;
+  }
 
-  template <typename Service>
-  bool sendReq(Service *service, const typename Service::Req &req,
-               int timeout_ms);
+  const auto &id() const { return id_; }
+
+  virtual void init() {}
+
+  // interface with router
+  bool routeIn(const MsgBase *msg, int from_tsp, int timeout_ms);
 
   virtual ~TransportBase() = default;
 
 protected:
-  void sendWork();
+  virtual bool routeInNormal(const MsgBase *msg, int from_tsp,
+                             int timeout_ms) = 0;
+  virtual bool routeInRequest(const MsgBase *msg, int from_tsp,
+                              int timeout_ms) = 0;
+  virtual bool routeInResponse(const MsgBase *msg, int from_tsp,
+                               int timeout_ms) = 0;
+  virtual bool routeInServiceBroadcast(const MsgBase *msg, int from_tsp,
+                                       int timeout_ms) = 0;
+  virtual bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
+                                       int timeout_ms) = 0;
 
-  void recvWork();
-
-  void serviceWork();
-
-  void recvNormal(const MsgBase *msg);
-  void recvRequest(const MsgBase *msg);
-  void recvResponse(const MsgBase *msg);
-
-  // thread safe
-  virtual int send(const void *data, size_t len, int prio,
-                   int timeout_ms = -1) = 0;
-
-  // thread safe
-  virtual int recv(void *data, size_t len, int *prio = nullptr,
-                   int timeout_ms = -1) = 0;
+  bool routeOut(const MsgBase *msg, int to_tsp = -1, int timeout_ms = -1);
 
 protected:
   int32_t id_ = -1;
+  Router *router_ = nullptr;
   uint32_t topic_bit_mask_ = 0;
-
-  etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
-  etl::array<etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES> service_metas_{};
-
-  std::unique_ptr<Thread> send_worker_;
-  std::unique_ptr<Thread> recv_worker_;
-  std::unique_ptr<Thread> service_worker_;
-
-  union Buffer {
-    MsgBase msg;
-    uint8_t data[UROS_MSG_MAX_SIZE];
-  };
-  Buffer send_buf_;
-  Buffer recv_buf_;
-
-  MessageBuffer req_queue_{UROS_TRANSPORT_REQ_QUEUE_SIZE};
-  Buffer req_buf_;
-  Buffer rsp_buf_;
+  etl::array<TopicMeta, UROS_MAX_TOPICS> topic_metas_;       // TODO: init
+  etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_; // TODO: init
 };
+
+struct Router {
+  void addTransport(TransportBase *tsp);
+
+  bool route(const MsgBase *msg, int from_tsp, int to_tsp = -1,
+             int timeout_ms = 0);
+
+protected:
+  bool routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
+                   int timeout_ms);
+  bool routeRequest(const MsgBase *msg, int from_tsp, int to_tsp,
+                    int timeout_ms);
+  bool routeResponse(const MsgBase *msg, int from_tsp, int to_tsp,
+                     int timeout_ms);
+  bool routeServiceBroadcast(const MsgBase *msg, int from_tsp, int to_tsp,
+                             int timeout_ms);
+  bool routeServiceDiscovery(const MsgBase *msg, int from_tsp, int to_tsp,
+                             int timeout_ms);
+
+  bool broadcast(const MsgBase *msg, int from_tsp, int timeout_ms);
+
+protected:
+  etl::vector<TransportBase *, UROS_MAX_TRANSPORT> transports_;
+};
+
+struct TransportLocal;
 
 struct TransportManager {
   template <typename Transport> static Transport *AddTransport() {
     return Instance().addTransport<Transport>();
+  }
+
+  static TransportLocal *GetTransportLocal() {
+    return Instance().getTransportLocal();
   }
 
   static void Init() { return Instance().init(); }
@@ -99,15 +127,18 @@ protected:
 
   template <typename Transport> Transport *addTransport();
 
+  TransportLocal *getTransportLocal();
+
   void init();
 
 protected:
-  TransportManager() = default;
+  TransportManager();
   TransportManager(const TransportManager &other) = delete;
   TransportManager &operator=(const TransportManager &other) = delete;
 
 protected:
-  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORTS> tsps_;
+  Router router_;
+  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORT> transports_;
 };
 
 } // namespace uros

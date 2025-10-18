@@ -2,122 +2,112 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <tuple>
 
 #include "etl/vector.h"
 
+#include "msg.h"
 #include "platform.h"
 
 namespace uros {
 
 struct TopicBase;
+struct ServiceBase;
 
 struct TopicMeta {
-  const char *name = "";
   TopicBase *topic = nullptr;
-};
-
-struct RequestInfo {
-  int tsp_in;            // which transport this request come from
-  uint32_t req_id;       // unique global identifier of an request
-  int64_t deadline = -1; // after deadline, request is treat as invalid
+  int seq = -1;
 };
 
 struct ServiceMeta {
-  int dist = -1;
+  ServiceBase *service = nullptr;
+  // TODO: maybe more
 };
 
-struct TransportInterface {};
+struct TransportBase {
 
-template <typename Derived> struct TransportBase : public TransportInterface {
+  auto &id() { return id_; }
+  const auto &id() const { return id_; }
 
   bool declareTopic(const char *topic_name);
 
-  int32_t &id() { return id_; }
-  const int32_t &id() const { return id_; }
+  bool declareService(const char *service_name);
 
-  void init() { derived().initImpl(); }
+  void init();
 
-  // nonblocking!
-  template <typename Topic>
-  void write(Topic *topic, const typename Topic::Msg &msg) {
-    derived().writeImpl(topic, msg);
-  }
+  template <typename Topic> void notify(Topic *topic);
 
-  int getRouteDistance(int service_id);
-
-  // send service request to transport
   template <typename Service>
-  bool sendRequest(Service *service, const typename Service::Req &req, int tsp,
-                   int timeout_ms) {
-    derived().sendRequestImpl(service, req, tsp, timeout_ms);
-  }
+  bool sendReq(Service *service, const typename Service::Req &req,
+               int timeout_ms);
 
-  // nonblocking!, send service response to transport
-  template <typename Service>
-  bool sendResponse(Service *service, const typename Service::Rsp &rsp) {
-    derived().sendResponseImpl(service, rsp);
-  }
+  virtual ~TransportBase() = default;
 
 protected:
-  Derived &derived() { return static_cast<Derived &>(*this); }
-  const Derived &derived() const { return static_cast<const Derived &>(*this); }
+  void sendWork();
 
-  void initImpl() {} // default version doing nothing
+  void recvWork();
+
+  void serviceWork();
+
+  void recvNormal(const MsgBase *msg);
+  void recvRequest(const MsgBase *msg);
+  void recvResponse(const MsgBase *msg);
+
+  // thread safe
+  virtual int send(const void *data, size_t len, int prio,
+                   int timeout_ms = -1) = 0;
+
+  // thread safe
+  virtual int recv(void *data, size_t len, int *prio = nullptr,
+                   int timeout_ms = -1) = 0;
 
 protected:
-  int32_t id_ = -1; // unique id of transport, used for msg routing
-  etl::array<TopicBase *, UROS_MAX_TOPICS> topics_;
-  etl::array<ServiceMeta, UROS_MAX_SERVICES> service_metas_;
-  etl::array<RequestInfo, UROS_TRANSPORT_MAX_REQS> req_infos_;
+  int32_t id_ = -1;
+  uint32_t topic_bit_mask_ = 0;
+
+  etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
+  etl::array<etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES> service_metas_{};
+
+  std::unique_ptr<Thread> send_worker_;
+  std::unique_ptr<Thread> recv_worker_;
+  std::unique_ptr<Thread> service_worker_;
+
+  union Buffer {
+    MsgBase msg;
+    uint8_t data[UROS_MSG_MAX_SIZE];
+  };
+  Buffer send_buf_;
+  Buffer recv_buf_;
+
+  MessageBuffer req_queue_{UROS_TRANSPORT_REQ_QUEUE_SIZE};
+  Buffer req_buf_;
+  Buffer rsp_buf_;
 };
 
-template <typename... TTransports> struct TransportManagerT {
-  // Get the type of the Idx-th transport
-  template <size_t Idx>
-  using TransportType = std::tuple_element_t<Idx, std::tuple<TTransports...>>;
-
-  template <template <typename> class Transform,
-            template <typename...> class Target>
-  using ApplyTransports = Target<typename Transform<TTransports>::type...>;
-
-  static constexpr size_t size = sizeof...(TTransports);
-
-  static TransportManagerT &Instance() {
-    static TransportManagerT inst;
-    return inst;
+struct TransportManager {
+  template <typename Transport> static Transport *AddTransport() {
+    return Instance().addTransport<Transport>();
   }
 
   static void Init() { return Instance().init(); }
 
-  template <size_t Idx> static auto &Transport() {
-    return Instance().template transport<Idx>();
-  }
-
-  template <typename TTransport> static auto &Transport() {
-    return Instance().template transport<TTransport>();
-  }
-
-  static auto &Transports() { return Instance().transports(); }
-
 protected:
-  template <size_t Idx> auto &transport() { return std::get<Idx>(transports_); }
-
-  template <typename TTransport> auto &transport() {
-    return std::get<TTransport>(transports_);
+  static TransportManager &Instance() {
+    static TransportManager inst;
+    return inst;
   }
 
-  auto &transports() { return transports_; }
+  template <typename Transport> Transport *addTransport();
 
   void init();
 
 protected:
-  TransportManagerT();
-  TransportManagerT(const TransportManagerT &other) = delete;
-  TransportManagerT &operator=(const TransportManagerT &other) = delete;
+  TransportManager() = default;
+  TransportManager(const TransportManager &other) = delete;
+  TransportManager &operator=(const TransportManager &other) = delete;
 
 protected:
-  std::tuple<TTransports...> transports_;
+  etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORTS> tsps_;
 };
 
 } // namespace uros

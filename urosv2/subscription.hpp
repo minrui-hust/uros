@@ -12,7 +12,7 @@ void SubscriptionT<TMsg>::subscribe(
 }
 
 template <typename TMsg> void SubscriptionT<TMsg>::spinOnce() {
-  if (topic_->read(msg_, seq_)) {
+  if (topic_->read(msg_, generation_)) {
     cb_(msg_);
   }
 }

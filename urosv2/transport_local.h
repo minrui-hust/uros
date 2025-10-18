@@ -7,13 +7,11 @@ namespace uros {
 
 struct TransportLocal : public TransportBase {
 
-  // interface with publisher
+  // interface with topic
   template <typename Topic>
   int write(Topic *topic, const typename Topic::Msg &msg);
 
-  template <typename Topic> void notify(Topic *topic);
-
-  // interface with client
+  // interface with service
   template <typename Service>
   bool call(Service *service, const typename Service::Req &req,
             typename Service::Rsp &rsp, int timeout_ms);
@@ -29,9 +27,7 @@ protected:
   bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
                                int timeout_ms) override;
 
-  template <typename Service>
-  bool remoteCall(Service *service, const typename Service::Req &req,
-                  typename Service::Rsp &rsp, int timeout_ms);
+  bool remoteCall(const MsgBase *req, MsgBase *rsp, int timeout_ms);
 };
 
 } // namespace uros

@@ -11,25 +11,30 @@
 
 namespace uros {
 
-struct TransportBase;
-
 struct TopicBase {
   TopicBase(const char *name, int id, int prio, type_id_t msg_type,
             size_t msg_size)
       : id_(id), name_(name), prio_(prio), msg_type_(msg_type),
         msg_size_(msg_size) {}
 
-  // property accessor
   const auto &id() const { return id_; }
+
   const char *name() const { return name_; }
+
   const auto &prio() const { return prio_; }
+
   const type_id_t &msgType() const { return msg_type_; }
+
   const size_t &msgSize() const { return msg_size_; }
 
-  bool registerTransport(TransportBase *tsp);
+  int32_t generation() const {
+    LockGuard<CriticalLock> lg;
+    return generation_;
+  }
 
-  virtual int write(TransportBase *tsp, const MsgBase *msg) = 0;
-  virtual bool read(MsgBase *msg, int &seq) = 0;
+  virtual int recvWrite(const MsgBase *msg) = 0;
+
+  virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
   virtual ~TopicBase() = default;
 
@@ -39,37 +44,34 @@ protected:
   int prio_;
   type_id_t msg_type_;
   size_t msg_size_;
+  int generation_ = -1;
 
   etl::vector<etl::unique_ptr<PublisherBase>, UROS_TOPIC_MAX_PUBS> pubs_;
   etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
-
-  etl::array<TransportBase *, UROS_MAX_TRANSPORTS> tsps_{};
 };
 
 template <typename TMsg> struct TopicT : public TopicBase {
   using Msg = TMsg;
 
   TopicT(const char *name, int id, int prio)
-      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {
-    msg_.__meta__.id.msg.seq = -1;
-  }
+      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
 
   PublisherT<Msg> *addPublisher();
 
   SubscriptionT<Msg> *
   addSubscription(const std::function<void(const Msg &)> &cb);
 
-  // write new msg on topic
-  int write(PublisherBase *pub, const TMsg &msg);
-  int write(TransportBase *tsp, const MsgBase *msg) override;
+  // interface for publisher
+  int write(const TMsg &msg);
 
-  // read msg on topic
+  // interface for subscriber
   bool read(TMsg &msg, int &gen);
-  bool read(MsgBase *msg, int &gen) override;
 
-protected:
-  int update(const TMsg &msg, int seq);
-  void notify(TransportBase *tsp);
+  // interface for transport
+  int doWrite(const TMsg &msg);
+  int recvWrite(const MsgBase *msg) override;
+
+  etl::unique_ptr<MsgBase> createMsg() const override;
 
 protected:
   TMsg msg_;

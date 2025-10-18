@@ -4,40 +4,47 @@
 
 namespace uros {
 
-template <typename TransportManager, typename TMsg> struct TopicT;
+template <typename TMsg> struct TopicT;
 
 struct SubscriptionBase {
-  SubscriptionBase(EventGroup *evt, int32_t idx)
-      : evt_(evt), bit_mask_(1 << idx) {
-    CHECK(evt);
-    CHECK(idx < 24); // only 24 bits for event
+  SubscriptionBase(int id) : id_(id) {}
+
+  void setupEvent(EventGroup *evt, int bit_idx) {
+    CHECK(evt)
+    CHECK(bit_idx < 24);
+    evt_ = evt;
+    bit_mask_ = 1 << bit_idx;
   }
 
-  const EventBits &bitMask() const { return bit_mask_; }
+  const auto &bitMask() const { return bit_mask_; }
 
   void notify() { evt_->set(bit_mask_); }
 
   virtual void spinOnce() = 0;
 
+  virtual ~SubscriptionBase() = default;
+
 protected:
-  EventGroup *evt_;
-  EventBits bit_mask_;
-  int32_t generation_ = -1;
+  int id_; // index in topic
+  EventGroup *evt_ = nullptr;
+  EventBits bit_mask_ = 0;
+  int seq_ = -1;
 };
 
-template <typename TransportManager, typename TMsg>
-struct SubscriptionT : public SubscriptionBase {
-  using Topic = TopicT<TransportManager, TMsg>;
+template <typename TMsg> struct SubscriptionT : public SubscriptionBase {
+  using Topic = TopicT<TMsg>;
+  using Msg = TMsg;
 
-  SubscriptionT(EventGroup *evt, int32_t idx) : SubscriptionBase(evt, idx) {}
+  SubscriptionT(int id) : SubscriptionBase(id) {}
 
-  void subscribe(Topic *topic, const std::function<void(const TMsg &)> &cb);
+  void subscribe(Topic *topic, const std::function<void(const Msg &)> &cb);
 
   void spinOnce() override;
 
 protected:
+  Msg msg_;
   Topic *topic_;
-  std::function<void(const TMsg &)> cb_;
+  std::function<void(const Msg &)> cb_;
 };
 
 } // namespace uros

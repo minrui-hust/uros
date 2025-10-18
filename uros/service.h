@@ -1,16 +1,24 @@
 #pragma once
 
+#include <climits>
+
 #include "etl/vector.h"
 
-#include "uros_config.h"
+#include "platform.h"
 
 #include "client.h"
 #include "msg.h"
 #include "server.h"
-#include "transport.h"
 #include "utils.h"
 
 namespace uros {
+
+struct TransportBase;
+
+struct TransportMeta {
+  TransportBase *tsp = nullptr;
+  int dist = INT_MAX;
+};
 
 struct ServiceBase {
   ServiceBase(const char *name, int id, type_id_t req_type, type_id_t rsp_type,
@@ -18,7 +26,7 @@ struct ServiceBase {
       : id_(id), name_(name), req_type_(req_type), rsp_type_(rsp_type),
         req_size_(req_size), rsp_size_(rsp_size) {}
 
-  const int32_t &id() const { return id_; }
+  const auto &id() const { return id_; }
 
   const char *name() const { return name_; }
 
@@ -30,24 +38,19 @@ struct ServiceBase {
 
   const size_t &rspSize() const { return rsp_size_; }
 
-  bool registerServer(ServerBase *srv) {
-    srv_ = srv;
-    return true; // TODO: borad cast server registration
-  }
+  bool registerTransport(TransportBase *tsp);
 
-  bool registerClient(ClientBase *cli) {
-    if (clis_.full()) {
-      return false;
-    }
-    clis_.emplace_back(cli);
-    return true;
-  }
+  const bool serverPresent() const { return srvs_.size() > 0; }
 
-  // this should be non-blocking
-  virtual void routeRequest(const int tsp_id, const ReqBase *req) = 0;
-  virtual void routeResponse(const int tsp_id, const RspBase *rsp) = 0;
+  virtual bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+                    int timeout_ms) = 0;
 
-  virtual void setTransport(const int32_t tsp_id, TransportInterface *tsp) = 0;
+  virtual void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) = 0;
+
+  // virtual void writeServiceBroadcast(TransportBase *tsp,
+  //                                    const ServiceBroadcast &sbc) = 0;
+
+  virtual ~ServiceBase() = default;
 
 protected:
   int id_;
@@ -56,14 +59,17 @@ protected:
   type_id_t rsp_type_;
   size_t req_size_;
   size_t rsp_size_;
+  int req_version_ = -1;
 
-  ServerBase *srv_ = nullptr;
-  etl::vector<ClientBase *, UROS_SERVICE_MAX_CLIS> clis_;
+  etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
+  etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
+
+  etl::array<etl::unique_ptr<TransportMeta>, UROS_MAX_TRANSPORTS> tsp_metas_{};
 };
 
-template <typename TTransportManager, typename TReq, typename TRsp>
-struct ServiceT : public ServiceBase {
-  using TransportManager = TTransportManager;
+struct TransportLocal;
+
+template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   using Req = TReq;
   using Rsp = TRsp;
 
@@ -71,43 +77,47 @@ struct ServiceT : public ServiceBase {
       : ServiceBase(name, id, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
                     sizeof(TRsp)) {}
 
-  // request related
+  ClientT<Req, Rsp> *addClient();
 
-  // put request is called by client
-  void sendRequest(const TReq &req);
+  ServerT<Req, Rsp> *
+  addServer(const std::function<void(const Req &, Rsp &)> &cb);
 
-  // emit request is called by TransportLocal
-  bool emitRequest(const TReq &req, int timeout_ms);
+  // call from client
+  bool call(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
 
-  // fetch is called by registered server
-  bool fetchRequest(TReq &req);
+  // call from transport
+  bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+            int timeout_ms) override;
 
-  // route is called by TransportRemote
-  void routeRequest(const int tsp_id, const ReqBase *req) override;
+  bool callLocal(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
+  bool callRemote(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
 
-  // response related
+  // interface with server
+  bool readReq(Req &req, int &ver);
 
-  // called by server to send back response after process request
-  void sendResponse(const TRsp &rsp);
+  int writeReq(const Req &req);
 
-  // called by TransportLocal to emit response to client
-  bool emitResponse(TRsp &rsp, int timeout_ms);
+  void writeRsp(const Rsp &rsp, TransportBase *from_tsp);
+  void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) override;
 
-  // called by TransportRemote to route reponse
-  void routeResponse(const int tsp_id, const RspBase *rsp) override;
+  bool waitRsp(Rsp &rsp, int timeout_ms);
+
+  TransportBase *findRoute(TransportBase *from_tsp);
+
+  // void writeServiceBroadcast(TransportBase *tsp,
+  //                            const ServiceBroadcast &sbc) override;
 
 protected:
-  TReq req_;
-  TRsp rsp_;
+  friend TransportLocal;
 
-  etl::array<TransportInterface *, TransportManager::size> transports_{};
+  Mutex lock_req_;
+  Req req_;
+
+  BinarySemaphore sem_rsp_;
+  Rsp rsp_;
 };
 
 struct ServiceManager {
-  static ServiceManager &Instance() {
-    static ServiceManager inst;
-    return inst;
-  }
 
   template <typename Service>
   static Service *AddService(const char *name, int id) {
@@ -119,6 +129,11 @@ struct ServiceManager {
   }
 
 protected:
+  static ServiceManager &Instance() {
+    static ServiceManager inst;
+    return inst;
+  }
+
   template <typename Service> Service *addService(const char *name, int id);
 
   template <typename Service> Service *findService(const char *name);
@@ -129,7 +144,7 @@ protected:
   ServiceManager &operator=(const ServiceManager &other) = delete;
 
 protected:
-  etl::array<std::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_{};
+  etl::array<etl::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_{};
 };
 
 } // namespace uros

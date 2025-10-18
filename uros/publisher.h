@@ -1,21 +1,33 @@
 #pragma once
 
+#include <cstdint>
+
 namespace uros {
 
-template <typename TransportManager, typename TMsg> struct TopicT;
+template <typename TMsg> struct TopicT;
 
-struct PublisherBase {};
+struct PublisherBase {
+  PublisherBase(int id) : id_(id) {}
 
-template <typename TransportManager, typename TMsg>
-struct PublisherT : public PublisherBase {
-  using Topic = TopicT<TransportManager, TMsg>;
+  virtual ~PublisherBase() = default;
+
+protected:
+  int id_;
+};
+
+template <typename TMsg> struct PublisherT : public PublisherBase {
+  using Topic = TopicT<TMsg>;
+  using Msg = TMsg;
+
+  PublisherT(int id) : PublisherBase(id) {}
 
   void advertise(Topic *topic);
 
-  void publish(const TMsg &msg);
+  void publish(const Msg &msg);
 
 protected:
   Topic *topic_;
+  int16_t seq_ = 0;
 };
 
 } // namespace uros
