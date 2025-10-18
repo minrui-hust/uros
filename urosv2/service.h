@@ -38,12 +38,17 @@ struct ServiceBase {
 
   const size_t &rspSize() const { return rsp_size_; }
 
+  bool registerTransport(TransportBase *tsp);
+
   const bool serverPresent() const { return srvs_.size() > 0; }
 
   virtual bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
                     int timeout_ms) = 0;
 
   virtual void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) = 0;
+
+  virtual void writeServiceBroadcast(TransportBase *tsp,
+                                     const ServiceBroadcast &sbc) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -89,7 +94,6 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   // interface with server
   bool readReq(Req &req, int &ver);
-  bool sendReq(const Req &req, TransportBase *from_tsp, int timeout_ms);
 
   int writeReq(const Req &req);
 
@@ -97,6 +101,11 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) override;
 
   bool waitRsp(Rsp &rsp, int timeout_ms);
+
+  TransportBase *findRoute(TransportBase *from_tsp);
+
+  void writeServiceBroadcast(TransportBase *tsp,
+                             const ServiceBroadcast &sbc) override;
 
 protected:
   friend TransportLocal;

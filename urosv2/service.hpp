@@ -9,6 +9,26 @@
 
 namespace uros {
 
+inline bool ServiceBase::registerTransport(TransportBase *tsp) {
+  auto tsp_id = tsp->id();
+  if (tsp_id >= tsp_metas_.size()) {
+    return false;
+  }
+
+  auto &meta = tsp_metas_[tsp_id];
+  if (meta) {
+    UROS_PRINT("tsp '%d' already register on service %d \n", tsp_id, id_);
+    return false;
+  }
+
+  meta.reset(new TransportMeta);
+  meta->tsp = tsp;
+
+  UROS_PRINT("register transport '%d' to service %d succeed\n", tsp_id, id_);
+
+  return true;
+}
+
 template <typename Req, typename Rsp>
 ClientT<Req, Rsp> *ServiceT<Req, Rsp>::addClient() {
   if (clis_.full()) {
@@ -84,16 +104,25 @@ bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, TransportBase *tsp,
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp,
-                                    TransportBase *tsp, int timeout_ms) {
+                                    TransportBase *from_tsp, int timeout_ms) {
   int64_t enter_ms = now_ms();
 
+  // lock request
   int timeout_now =
       etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
   LockGuard<Mutex> lg(lock_req_, timeout_now);
 
+  // find route
+  auto to_tsp = findRoute(from_tsp);
+  if (!to_tsp) {
+    UROS_PRINT("failed to find route for service %d\n", id_);
+    return false;
+  }
+
+  // send request
   timeout_now =
       etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-  if (!sendReq(req, tsp, timeout_now)) {
+  if (!to_tsp->sendReq(this, req, timeout_ms)) {
     return false;
   }
 
@@ -105,10 +134,8 @@ bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp,
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::sendReq(const Req &req, TransportBase *from_tsp,
-                                 int timeout_ms) {
-
-  // 1. find the transport to send request
+TransportBase *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
+  // find the transport to send request
   int best_idx = -1;
   int min_dist = INT_MAX;
   {
@@ -122,23 +149,18 @@ bool ServiceT<Req, Rsp>::sendReq(const Req &req, TransportBase *from_tsp,
     }
   }
 
-  // 2. if found
-  bool send_one_at_least = false;
+  // if found
   if (min_dist < INT_MAX) {
-    if (tsp_metas_[best_idx]->tsp->sendReq(this, req, timeout_ms)) {
-      send_one_at_least = true;
-    }
-  } else {
-    for (auto &meta : tsp_metas_) {
-      if (meta->tsp != from_tsp) {
-        if (meta->tsp->sendReq(this, req, timeout_ms)) {
-          send_one_at_least = true;
-        }
-      }
-    }
+    return tsp_metas_[best_idx]->tsp;
   }
 
-  return send_one_at_least;
+  // not found
+  return nullptr;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
+                                               const ServiceBroadcast &sbc) {
 }
 
 template <typename Req, typename Rsp>
