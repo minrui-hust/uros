@@ -8,7 +8,7 @@ namespace uros {
 
 struct TransportRemoteHostUart : public TransportRemote {
 
-  void initHostUart();
+  void initHostUart(const char *drv_name);
 
   int send(const void *data, size_t len, int prio, int timeout_ms) override;
 

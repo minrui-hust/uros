@@ -22,7 +22,7 @@ struct TransportRemoteUart : public TransportRemote {
 
 private:
   Uart *uart_;
-  static const uint16_t MAX_SIZE = 512;
+  static const uint16_t MAX_SIZE = 128;
   uint8_t recv_buf_[MAX_SIZE] = {0};
   uint8_t send_buf_[MAX_SIZE] = {0};
 

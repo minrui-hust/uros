@@ -12,13 +12,12 @@
 
 namespace uros {
 
-inline void TransportRemoteHostUart::initHostUart() {
+inline void TransportRemoteHostUart::initHostUart(const char *drv_name) {
   //打开设备
-  fd_ = open("/dev/ttyACM0", O_RDWR | O_NOCTTY);
-  //   if (fd < 0) {
-  //     perror("open");
-  //     return 1;
-  //   }
+  fd_ = open(drv_name, O_RDWR | O_NOCTTY);
+  if (fd_ < 0) {
+    perror("open");
+  }
 
   // 配置串口
   struct termios tty;
