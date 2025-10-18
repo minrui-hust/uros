@@ -117,6 +117,8 @@ inline void TransportBase::recvWork() {
       continue;
     }
 
+    // TODO: check len and msg.size match
+
     auto msg = &recv_buf_.msg;
     if (msg->__meta__.type == MsgType::MsgTypeNormal) {
       recvNormal(msg);
