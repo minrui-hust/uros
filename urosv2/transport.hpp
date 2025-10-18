@@ -50,22 +50,26 @@ inline bool TransportBase::declareService(const char *service_name) {
   return true;
 }
 
-inline bool TransportBase::put(const MsgBase *msg, int from_tsp,
-                               int timeout_ms) {
-  if (msg->__id__.type == MsgTypeNormal) {
-    return putNormal(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeRequest) {
-    return putRequest(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeResponse) {
-    return putResponse(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceBroadcast) {
-    return putServiceBroadcast(msg, from_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
-    return putServiceDiscovery(msg, from_tsp, timeout_ms);
+inline bool TransportBase::routeIn(const MsgBase *msg, int from_tsp,
+                                   int timeout_ms) {
+  if (msg->__meta__.type == MsgType::MsgTypeNormal) {
+    return routeInNormal(msg, from_tsp, timeout_ms);
+  } else if (msg->__meta__.type == MsgType::MsgTypeRequest) {
+    return routeInRequest(msg, from_tsp, timeout_ms);
+  } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
+    return routeInResponse(msg, from_tsp, timeout_ms);
+  } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
+    return routeInServiceBroadcast(msg, from_tsp, timeout_ms);
+  } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
+    return routeInServiceDiscovery(msg, from_tsp, timeout_ms);
   } else {
     UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
     return false;
   }
+}
+
+bool TransportBase::routeOut(const MsgBase *msg, int to_tsp, int timeout_ms) {
+  return router_->route(msg, id_, to_tsp, timeout_ms);
 }
 
 inline void Router::addTransport(TransportBase *tsp) {
@@ -74,15 +78,15 @@ inline void Router::addTransport(TransportBase *tsp) {
 
 inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
                           int timeout_ms) {
-  if (msg->__id__.type == MsgTypeNormal) {
+  if (msg->__meta__.type == MsgType::MsgTypeNormal) {
     return routeNormal(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeRequest) {
+  } else if (msg->__meta__.type == MsgType::MsgTypeRequest) {
     return routeRequest(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeResponse) {
+  } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
     return routeResponse(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceBroadcast) {
+  } else if (msg->__meta__.type == MsgType::MsgTypeServiceBroadcast) {
     return routeServiceBroadcast(msg, from_tsp, to_tsp, timeout_ms);
-  } else if (msg->__id__.type == MsgTypeServiceDiscovery) {
+  } else if (msg->__meta__.type == MsgType::MsgTypeServiceDiscovery) {
     return routeServiceDiscovery(msg, from_tsp, to_tsp, timeout_ms);
   } else {
     UROS_PRINT("Unknow msg type: %d\n", msg->__id__.type);
@@ -92,9 +96,10 @@ inline bool Router::route(const MsgBase *msg, int from_tsp, int to_tsp,
 
 inline bool Router::routeNormal(const MsgBase *msg, int from_tsp, int to_tsp,
                                 int timeout_ms) {
-  UROS_PRINT("Route msg: %d, %d\n", msg->__id__.entry, msg->__id__.seq);
+  UROS_PRINT("Route msg: %d, %d\n", msg->__meta__.id.entry,
+             msg->__meta__.id.seq);
   if (to_tsp >= 0 && (size_t)to_tsp < transports_.size()) {
-    return transports_[to_tsp]->put(msg, from_tsp, timeout_ms);
+    return transports_[to_tsp]->routeIn(msg, from_tsp, timeout_ms);
   } else if (to_tsp < 0) {
     return broadcast(msg, from_tsp, timeout_ms);
   } else {
@@ -127,7 +132,7 @@ inline bool Router::broadcast(const MsgBase *msg, int from_tsp,
                               int timeout_ms) {
   for (auto &tsp : transports_) {
     if (tsp->id() != from_tsp) {
-      tsp->put(msg, from_tsp, timeout_ms);
+      tsp->routeIn(msg, from_tsp, timeout_ms);
     }
   }
   return true;

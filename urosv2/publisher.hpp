@@ -10,8 +10,8 @@ template <typename Msg> void PublisherT<Msg>::advertise(TopicT<Msg> *topic) {
 }
 
 template <typename TMsg> void PublisherT<TMsg>::publish(const TMsg &msg) {
-  msg.__id__.participant = id_;
-  msg.__id__.type = MsgTypeNormal;
+  msg.__meta__.participant = id_;
+  msg.__meta__.type = MsgType::MsgTypeNormal;
   topic_->write(msg);
 }
 

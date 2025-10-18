@@ -42,6 +42,7 @@ template <typename TMsg> struct SubscriptionT : public SubscriptionBase {
   void spinOnce() override;
 
 protected:
+  Msg msg_;
   Topic *topic_;
   std::function<void(const Msg &)> cb_;
 };

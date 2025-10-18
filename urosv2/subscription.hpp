@@ -6,15 +6,14 @@
 namespace uros {
 template <typename TMsg>
 void SubscriptionT<TMsg>::subscribe(
-    Topic *topic, const std::function<void(const Msg &)> &cb) {
+    Topic *topic, const std::function<void(const TMsg &)> &cb) {
   cb_ = cb;
   topic_ = topic;
 }
 
 template <typename TMsg> void SubscriptionT<TMsg>::spinOnce() {
-  TMsg msg;
-  if (topic_->read(msg, generation_)) {
-    cb_(msg);
+  if (topic_->read(msg_, generation_)) {
+    cb_(msg_);
   }
 }
 

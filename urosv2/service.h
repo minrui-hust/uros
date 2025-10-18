@@ -29,8 +29,9 @@ struct ServiceBase {
 
   const size_t &rspSize() const { return rsp_size_; }
 
-  virtual void recvRsp(const MsgBase *msg) = 0;
-  virtual void recvReq(const MsgBase *msg) = 0;
+  const bool serverPresent() const { return srvs_.size() > 0; }
+
+  virtual bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -41,6 +42,8 @@ protected:
   type_id_t rsp_type_;
   size_t req_size_;
   size_t rsp_size_;
+  int req_version_ = -1;
+  int rsp_version_ = -1;
 
   etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
   etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
@@ -59,24 +62,23 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   ServerT<Req, Rsp> *
   addServer(const std::function<void(const Req &, Rsp &)> &cb);
 
+  // interface with client
   bool call(const Req &req, Rsp &rsp, int timeout_ms);
 
-  void recvRsp(const MsgBase *msg) override;
-  void recvReq(const MsgBase *msg) override;
+  // interface with transport
+  bool doCall(const Req &req, Rsp &rsp, int timeout_ms);
+  bool recvCall(const MsgBase *req, MsgBase *rsp, int timeout_ms) override;
 
-  const Req *req() { return req_; }
-  Rsp *rsp() { return rsp_; }
-  void notifyRsp() { sem_rsp_.give(); }
-
-protected:
-  bool serveLocal(const Req &req, Rsp &rsp, int timeout_ms);
-  bool serveRemote(const Req &req, Rsp &rsp, int timeout_ms);
+  // interface with server
+  bool readReq(Req &req, int &ver); // server get request from service
+  void writeRsp(const Rsp &rsp);    // server write response to service
 
 protected:
   Mutex lock_req_;
+  Req req_;
+
   BinarySemaphore sem_rsp_;
-  const Req *req_ = nullptr;
-  Rsp *rsp_ = nullptr;
+  Rsp rsp_;
 };
 
 struct ServiceManager {

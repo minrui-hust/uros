@@ -32,7 +32,7 @@ struct TopicBase {
     return generation_;
   }
 
-  virtual void recv(const MsgBase *msg) = 0;
+  virtual int recvWrite(const MsgBase *msg) = 0;
 
   virtual etl::unique_ptr<MsgBase> createMsg() const = 0;
 
@@ -61,13 +61,15 @@ template <typename TMsg> struct TopicT : public TopicBase {
   SubscriptionT<Msg> *
   addSubscription(const std::function<void(const Msg &)> &cb);
 
-  void write(const TMsg &msg);
+  // interface for publisher
+  int write(const TMsg &msg);
 
+  // interface for subscriber
   bool read(TMsg &msg, int &gen);
 
-  int update(const TMsg &msg);
-
-  void recv(const MsgBase *msg) override;
+  // interface for transport
+  int doWrite(const TMsg &msg);
+  int recvWrite(const MsgBase *msg) override;
 
   etl::unique_ptr<MsgBase> createMsg() const override;
 

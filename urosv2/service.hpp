@@ -46,65 +46,81 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, int timeout_ms) {
-  if (!srvs_.empty()) {
-    return serveLocal(req, rsp, timeout_ms);
-  } else {
-    return serveRemote(req, rsp, timeout_ms);
-  }
+  return TransportManager::GetTransportLocal()->call(this, req, timeout_ms);
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::serveLocal(const Req &req, Rsp &rsp, int timeout_ms) {
-  LockGuard<Mutex> lg(lock_req_, timeout_ms);
-  if (!lg.locked()) {
+bool ServiceT<Req, Rsp>::doCall(const Req &req, Rsp &rsp, int timeout_ms) {
+  if (srvs_.size() <= 0) { // no server registered
     return false;
   }
 
-  // clear maybe out dated rsp
-  sem_rsp_.take(0);
+  int64_t enter_ms = NowMilli();
 
-  // prepare req and rsp
-  req_ = &req;
-  rsp_ = &rsp;
+  int timeout_now = etl::min(
+      timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
 
-  // notify the server to process
+  // take lock_req_, caused we only allow one access at same time
+  LockGuard<Mutex> lg(lock_req_, timeout_now);
+
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    req_ = req;
+    ++req_version_;
+  }
+
+  // notify server, and wait for server do the work
   srvs_[0]->notify();
 
-  // wait for server process done
-  if (!sem_rsp_.take(timeout_ms)) {
-    return false;
-  }
+  bool rsp_ok = false;
+  do {
+    int timeout_now = etl::min(
+        timeout_ms, etl::max(timeout_ms - int(NowMilli() - enter_ms), 0));
+    if (!sem_rsp_.take(timeout_now)) {
+      return false;
+    }
 
-  // rsp_ will be assigned by server
+    // if we take the semaphore successfully, but rsp_ok is not true,
+    // this means older or wrong rsp was routed to this service, we
+    // should discarded the rsp and wait again, until timeout
+
+    { // access to rsp_ should be in critical region
+      LockGuard<CriticalLock> lg;
+      if (req_.__meta__.id == rsp_.__meta__.id) {
+        rsp = rsp_;
+        rsp_ok = true;
+      }
+    }
+  } while (!rsp_ok);
 
   return true;
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::serveRemote(const Req &req, Rsp &rsp, int timeout_ms) {
-  LockGuard<Mutex> lg(lock_req_, timeout_ms);
-  if (!lg.locked()) {
+bool ServiceT<Req, Rsp>::recvCall(const MsgBase *req, MsgBase *rsp,
+                                  int timeout_ms) {
+  return doCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), timeout_ms);
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
+  LockGuard<CriticalLock> lg;
+  if (req_version_ <= ver) {
     return false;
   }
-
-  // clear maybe out dated rsp
-  sem_rsp_.take(0);
-
-  // prepare req and rsp
-  req_ = &req;
-  rsp_ = &rsp;
-
-  // send request via transport
-  TransportManager::GetTransportLocal()->sendReq(this, req);
-
-  // wait for server process done
-  if (!sem_rsp_.take(timeout_ms)) {
-    return false;
-  }
-
-  // rsp_ will be assigned in recvRsp
-
+  req = req_;
+  ver = req_version_;
   return true;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
+  { // update the request
+    LockGuard<CriticalLock> lg;
+    rsp_ = rsp;
+    ++rsp_version_;
+  }
+  sem_rsp_.give();
 }
 
 template <typename Service>

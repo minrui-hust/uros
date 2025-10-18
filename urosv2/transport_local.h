@@ -7,23 +7,27 @@ namespace uros {
 
 struct TransportLocal : public TransportBase {
 
+  // interface with topic
   template <typename Topic>
-  void sendMsg(Topic *topic, const typename Topic::Msg &msg);
+  int write(Topic *topic, const typename Topic::Msg &msg);
 
+  // interface with service
   template <typename Service>
-  void sendReq(Service *service, const typename Service::Req &req);
-
-  template <typename Service>
-  void sendRsp(Service *service, const typename Service::Rsp &rsp);
+  bool call(Service *service, const typename Service::Req &req,
+            typename Service::Rsp &rsp, int timeout_ms);
 
 protected:
-  bool putNormal(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putRequest(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putResponse(const MsgBase *msg, int from_tsp, int timeout_ms) override;
-  bool putServiceBroadcast(const MsgBase *msg, int from_tsp,
-                           int timeout_ms) override;
-  bool putServiceDiscovery(const MsgBase *msg, int from_tsp,
-                           int timeout_ms) override;
+  bool routeInNormal(const MsgBase *msg, int from_tsp, int timeout_ms) override;
+  bool routeInRequest(const MsgBase *msg, int from_tsp,
+                      int timeout_ms) override;
+  bool routeInResponse(const MsgBase *msg, int from_tsp,
+                       int timeout_ms) override;
+  bool routeInServiceBroadcast(const MsgBase *msg, int from_tsp,
+                               int timeout_ms) override;
+  bool routeInServiceDiscovery(const MsgBase *msg, int from_tsp,
+                               int timeout_ms) override;
+
+  bool remoteCall(const MsgBase *req, MsgBase *rsp, int timeout_ms);
 };
 
 } // namespace uros
