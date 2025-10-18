@@ -68,7 +68,7 @@ inline bool TransportBase::routeIn(const MsgBase *msg, int from_tsp,
   }
 }
 
-bool TransportBase::routeOut(const MsgBase *msg, int to_tsp, int timeout_ms) {
+inline bool TransportBase::routeOut(const MsgBase *msg, int to_tsp, int timeout_ms) {
   return router_->route(msg, id_, to_tsp, timeout_ms);
 }
 
