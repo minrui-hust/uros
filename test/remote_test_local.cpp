@@ -1,8 +1,8 @@
 #include <iostream>
 #include <thread>
 
-#include "urosv2/transport_socket.hpp"
-#include "urosv2/uros.h"
+#include "uros/transport_socket.hpp"
+#include "uros/uros.h"
 
 using namespace std::chrono_literals;
 
