@@ -28,7 +28,7 @@ struct TopicBase {
 
   bool registerTransport(TransportBase *tsp);
 
-  virtual int write(TransportBase *tsp, const MsgBase *msg) = 0;
+  virtual void write(TransportBase *tsp, const MsgBase *msg) = 0;
   virtual bool read(MsgBase *msg, int &seq) = 0;
 
   virtual ~TopicBase() = default;
@@ -60,15 +60,15 @@ template <typename TMsg> struct TopicT : public TopicBase {
   addSubscription(const std::function<void(const Msg &)> &cb);
 
   // write new msg on topic
-  int write(PublisherBase *pub, const TMsg &msg);
-  int write(TransportBase *tsp, const MsgBase *msg) override;
+  void write(PublisherBase *pub, const TMsg &msg);
+  void write(TransportBase *tsp, const MsgBase *msg) override;
 
   // read msg on topic
   bool read(TMsg &msg, int &gen);
   bool read(MsgBase *msg, int &gen) override;
 
 protected:
-  int update(const TMsg &msg, int seq);
+  bool update(const TMsg &msg, int seq);
   void notify(TransportBase *tsp);
 
 protected:
