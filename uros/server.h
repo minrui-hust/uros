@@ -13,20 +13,22 @@ struct ServerBase : SubscriptionBase {
 };
 
 template <typename TReq, typename TRsp> struct ServerT : ServerBase {
+  using Req = TReq;
+  using Rsp = TRsp;
   using Service = ServiceT<TReq, TRsp>;
+  using ServiceCallback = typename Service::ServiceCallback;
 
   ServerT(int id) : ServerBase(id) {}
 
-  bool bind(Service *service,
-            const std::function<void(const TReq &, TRsp &)> &cb);
+  bool bind(Service *service, const ServiceCallback &cb);
 
   void spinOnce() override;
 
 protected:
-  TReq req_;
-  TRsp rsp_;
+  Req req_;
+  Rsp rsp_;
   Service *service_;
-  std::function<void(const TReq &, TRsp &)> cb_;
+  ServiceCallback cb_;
 };
 
 } // namespace uros

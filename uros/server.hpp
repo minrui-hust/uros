@@ -5,8 +5,7 @@
 namespace uros {
 
 template <typename TReq, typename TRsp>
-bool ServerT<TReq, TRsp>::bind(
-    Service *service, const std::function<void(const TReq &, TRsp &)> &cb) {
+bool ServerT<TReq, TRsp>::bind(Service *service, const ServiceCallback &cb) {
   cb_ = cb;
   service_ = service;
 }
@@ -14,12 +13,9 @@ bool ServerT<TReq, TRsp>::bind(
 template <typename TReq, typename TRsp> void ServerT<TReq, TRsp>::spinOnce() {
   if (service_->readReq(req_, seq_)) {
     rsp_.__meta__.type = MsgTypeResponse;
-    rsp_.__meta__.id.rsp.system = req_.__meta__.id.req.system;
-    rsp_.__meta__.id.rsp.service = req_.__meta__.id.req.service;
-    rsp_.__meta__.id.rsp.client = req_.__meta__.id.req.client;
-    rsp_.__meta__.id.rsp.dist = 0;
+    rsp_.__meta__.id.rsp = req_.__meta__.id.req;
     cb_(req_, rsp_);
-    service_->writeRsp(rsp_, nullptr);
+    service_->writeRsp(this, rsp_);
   }
 }
 

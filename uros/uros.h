@@ -3,6 +3,7 @@
 #include "node.hpp"
 #include "publisher.hpp"
 #include "subscription.hpp"
+#include "system.h"
 #include "topic.hpp"
 #include "transport.hpp"
 
@@ -19,9 +20,14 @@ template <typename Transport> static auto RegisterTransport() {
   return TransportManager::AddTransport<Transport>();
 }
 
-static void Init() {
+static void Init(int sys_id = -1) {
+  // set system id
+  System::Id() = sys_id;
+
+  // init the transports
   TransportManager::Init();
-  // TODO: maybe init others
+
+  // TODO: maybe other work
 }
 
 } // namespace uros

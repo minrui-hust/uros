@@ -57,11 +57,8 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
 }
 
 template <typename TMsg>
-void TopicT<TMsg>::write(PublisherBase *pub, const TMsg &msg) {
-  static int seq = 0;
-  msg.__meta__.type = MsgTypeNormal;
-  msg.__meta__.id.msg.topic = id_;
-  if (update(msg, seq++)) {
+void TopicT<TMsg>::write(Publisher *pub, const TMsg &msg) {
+  if (update(msg, msg.__meta__.id.msg.seq)) {
     notify(nullptr);
   }
 }

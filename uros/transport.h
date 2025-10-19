@@ -25,11 +25,10 @@ struct ServiceMeta {
 
 struct TransportBase {
 
+  // accessers
   auto &id() { return id_; }
   const auto &id() const { return id_; }
-
   bool declareTopic(const char *topic_name);
-
   bool declareService(const char *service_name);
 
   void init();
@@ -49,9 +48,10 @@ protected:
 
   void serviceWork();
 
-  void recvNormal(const MsgBase *msg);
-  void recvRequest(const MsgBase *msg);
-  void recvResponse(const MsgBase *msg);
+  void recvNormal(const MsgBase *msg, size_t len);
+  void recvRequest(const MsgBase *msg, size_t len);
+  void recvResponse(const MsgBase *msg, size_t len);
+  void recvServiceBroadcast(const MsgBase *msg, size_t len);
 
   // thread safe
   virtual int send(const void *data, size_t len, int prio,
@@ -72,16 +72,26 @@ protected:
   std::unique_ptr<Thread> recv_worker_;
   std::unique_ptr<Thread> service_worker_;
 
-  union Buffer {
+  union MsgBuffer {
     MsgBase msg;
     uint8_t data[UROS_MSG_MAX_SIZE];
   };
-  Buffer send_buf_;
-  Buffer recv_buf_;
+  MsgBuffer send_buf_;
+  MsgBuffer recv_buf_;
+
+  union ReqBuffer {
+    ReqBase msg;
+    uint8_t data[UROS_MSG_MAX_SIZE];
+  };
+  ReqBuffer req_buf_;
+
+  union RspBuffer {
+    RspBase msg;
+    uint8_t data[UROS_MSG_MAX_SIZE];
+  };
+  RspBuffer rsp_buf_;
 
   MessageBuffer req_queue_{UROS_TRANSPORT_REQ_QUEUE_SIZE};
-  Buffer req_buf_;
-  Buffer rsp_buf_;
 };
 
 struct TransportManager {

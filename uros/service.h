@@ -18,37 +18,37 @@ struct TransportBase;
 struct TransportMeta {
   TransportBase *tsp = nullptr;
   int dist = INT_MAX;
+  int sys_nxt = -1;
 };
 
 struct ServiceBase {
   ServiceBase(const char *name, int id, type_id_t req_type, type_id_t rsp_type,
               size_t req_size, size_t rsp_size)
       : id_(id), name_(name), req_type_(req_type), rsp_type_(rsp_type),
-        req_size_(req_size), rsp_size_(rsp_size) {}
+        req_size_(req_size), rsp_size_(rsp_size) {
+    sbc_.__meta__.id.sbc.seq = -1;
+  }
 
+  // properti accessors
   const auto &id() const { return id_; }
-
   const char *name() const { return name_; }
-
   const type_id_t &reqType() const { return req_type_; }
-
   const type_id_t &rspType() const { return rsp_type_; }
-
   const size_t &reqSize() const { return req_size_; }
-
   const size_t &rspSize() const { return rsp_size_; }
 
   bool registerTransport(TransportBase *tsp);
 
-  const bool serverPresent() const { return srvs_.size() > 0; }
-
-  virtual bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+  // call service from transport
+  virtual bool call(TransportBase *tsp, const MsgBase *req, MsgBase *rsp,
                     int timeout_ms) = 0;
 
-  virtual void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) = 0;
+  // write response from transport
+  virtual void writeRsp(TransportBase *from_tsp, const MsgBase *rsp) = 0;
 
-  // virtual void writeServiceBroadcast(TransportBase *tsp,
-  //                                    const ServiceBroadcast &sbc) = 0;
+  // write service broad cast from transport
+  virtual void writeServiceBroadcast(TransportBase *tsp,
+                                     const MsgBase *sbc) = 0;
 
   virtual ~ServiceBase() = default;
 
@@ -59,19 +59,21 @@ protected:
   type_id_t rsp_type_;
   size_t req_size_;
   size_t rsp_size_;
+
   int req_version_ = -1;
 
-  etl::vector<etl::unique_ptr<ServerBase>, UROS_SERVICE_MAX_SRVS> srvs_;
-  etl::vector<etl::unique_ptr<ClientBase>, UROS_SERVICE_MAX_CLIS> clis_;
+  MsgBase sbc_;
 
   etl::array<etl::unique_ptr<TransportMeta>, UROS_MAX_TRANSPORTS> tsp_metas_{};
 };
 
-struct TransportLocal;
-
 template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
   using Req = TReq;
   using Rsp = TRsp;
+  using Server = ServerT<TReq, TRsp>;
+  using Client = ClientT<TReq, TRsp>;
+
+  using ServiceCallback = std::function<void(const Req &, Rsp &)>;
 
   ServiceT(const char *name, int id)
       : ServiceBase(name, id, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
@@ -79,42 +81,43 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   ClientT<Req, Rsp> *addClient();
 
-  ServerT<Req, Rsp> *
-  addServer(const std::function<void(const Req &, Rsp &)> &cb);
+  ServerT<Req, Rsp> *addServer(const ServiceCallback &cb);
 
-  // call from client
-  bool call(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
+  template <typename Server>
+  void writeServiceBroadcast(Server *srv, const MsgBase sbc);
+  void writeServiceBroadcast(TransportBase *tsp, const MsgBase *sbc) override;
 
-  // call from transport
-  bool call(const MsgBase *req, MsgBase *rsp, TransportBase *tsp,
+  // call the service
+  bool call(Client *cli, const Req &req, Rsp &rsp, int timeout_ms);
+  bool call(TransportBase *tsp, const MsgBase *req, MsgBase *rsp,
             int timeout_ms) override;
 
-  bool callLocal(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
-  bool callRemote(const Req &req, Rsp &rsp, TransportBase *tsp, int timeout_ms);
-
   // interface with server
-  bool readReq(Req &req, int &ver);
-
-  int writeReq(const Req &req);
-
-  void writeRsp(const Rsp &rsp, TransportBase *from_tsp);
-  void writeRsp(const MsgBase *rsp, TransportBase *from_tsp) override;
-
+  bool localCall(const Req &req, Rsp &rsp, int timeout_ms);
+  void writeReq(const Req &req);
   bool waitRsp(Rsp &rsp, int timeout_ms);
+  bool readReq(Req &, int &ver);
+  void writeRsp(Server *srv, const Rsp &rsp);
 
-  TransportBase *findRoute(TransportBase *from_tsp);
-
-  // void writeServiceBroadcast(TransportBase *tsp,
-  //                            const ServiceBroadcast &sbc) override;
+  bool remoteCall(TransportBase *tsp, const Req &req, Rsp &rsp, int timeout_ms);
+  TransportMeta *findRoute(TransportBase *from_tsp);
+  void writeRsp(TransportBase *from_tsp, const MsgBase *rsp) override;
 
 protected:
-  friend TransportLocal;
+  bool onServering() const { return srvs_.size() > 0; }
+  void writeRsp(const Rsp &rsp);
 
-  Mutex lock_req_;
+  bool updateServiceBroadcast(TransportBase *tsp, const MsgBase &sbc, int seq);
+  void forwardServiceBroadcast(TransportBase *tsp, const MsgBase &sbc);
+
+protected:
+  etl::vector<etl::unique_ptr<Server>, UROS_SERVICE_MAX_SRVS> srvs_;
+  etl::vector<etl::unique_ptr<Client>, UROS_SERVICE_MAX_CLIS> clis_;
+
   Req req_;
-
-  BinarySemaphore sem_rsp_;
   Rsp rsp_;
+  Mutex lock_req_;
+  BinarySemaphore sem_rsp_;
 };
 
 struct ServiceManager {

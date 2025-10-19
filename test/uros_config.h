@@ -6,9 +6,9 @@
 #define UROS_MAX_TRANSPORTS 4
 
 #define UROS_MAX_TOPICS 32
-#define UROS_MAX_SERVICES 32
+#define UROS_MAX_SERVICES 16
 static_assert(UROS_MAX_TOPICS <= 32);
-static_assert(UROS_MAX_SERVICES <= 32);
+static_assert(UROS_MAX_SERVICES <= 16);
 
 #define UROS_TOPIC_MAX_SUBS 8
 #define UROS_TOPIC_MAX_PUBS 1 // larger than 1 is not supported
