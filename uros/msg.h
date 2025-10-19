@@ -18,27 +18,27 @@ struct __attribute__((packed)) MsgId {
 static_assert(sizeof(MsgId) == 3);
 
 struct __attribute__((packed)) SbcId {
-  uint8_t sys_from : 5;
-  uint8_t service : 6;
-  uint8_t dist : 5;
+  uint32_t sys_from : 5;
+  uint32_t service : 6;
+  uint32_t dist : 5;
   int8_t seq;
 };
 static_assert(sizeof(SbcId) == 3);
 
 struct __attribute__((packed)) ReqId {
-  uint8_t sys_from : 5;
-  uint8_t sys_to : 5;
-  uint8_t service : 6;
-  uint8_t client : 4;
-  uint8_t seq : 4;
+  uint32_t sys_from : 5;
+  uint32_t sys_to : 5;
+  uint32_t service : 6;
+  uint32_t client : 4;
+  uint32_t seq : 4;
 };
 static_assert(sizeof(ReqId) == 3);
 
 using RspId = ReqId;
 
 struct __attribute__((packed)) MsgMeta {
-  uint8_t type : 3;
-  uint8_t sys : 5;
+  uint32_t type : 3;
+  uint32_t sys : 5;
   union __attribute__((packed)) {
     MsgId msg;
     SbcId sbc;
