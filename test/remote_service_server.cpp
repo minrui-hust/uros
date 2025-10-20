@@ -40,6 +40,7 @@ int main() {
         std::cout << "[SERVER] Service called with: " << req.a << " + " << req.b
                   << std::endl;
         rsp.c = req.a + req.b;
+        std::this_thread::sleep_for(10ms);
         std::cout << "[SERVER] Service response: " << rsp.c << std::endl;
       });
   assert(srv_add2);
