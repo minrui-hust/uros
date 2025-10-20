@@ -52,7 +52,7 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(const ServiceCallback &cb) {
     return nullptr;
   }
 
-  auto srv = new ClientT<Req, Rsp>(srvs_.size());
+  auto srv = new ServerT<Req, Rsp>(srvs_.size());
   CHECK(srv);
 
   srv->bind(this, cb);
@@ -76,10 +76,10 @@ template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(TransportBase *tsp, const MsgBase *req,
                               MsgBase *rsp, int timeout_ms) {
   if (onServering()) {
-    return localCall(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp),
+    return localCall(*static_cast<const Req *>(req), *static_cast<Rsp *>(rsp),
                      timeout_ms);
   } else {
-    return remoteCall(nullptr, *static_cast<Req *>(req),
+    return remoteCall(nullptr, *static_cast<const Req *>(req),
                       *static_cast<Rsp *>(rsp), timeout_ms);
   }
 }
@@ -143,16 +143,16 @@ TransportMeta *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
 
   // found
   if (min_dist < INT_MAX) {
-    return tsp_metas_[best_idx];
+    return tsp_metas_[best_idx].get();
   }
 
   return nullptr;
 }
 
 template <typename Req, typename Rsp>
-template <typename Server>
-void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv, const MsgBase sbc) {
-  if (updateServiceBroadcast(nullptr, sbc, sbc.__meta__.id.sbc.seq)) {
+void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv,
+                                               const MsgBase &sbc) {
+  if (updateServiceBroadcast(sbc, sbc.__meta__.id.sbc.seq)) {
     forwardServiceBroadcast(nullptr, sbc);
   }
 }
@@ -161,6 +161,8 @@ template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
                                                const MsgBase *sbc) {
   if (onServering()) {
+    UROS_PRINT("writeServiceBroadcast called from transport while service in "
+               "on serving, this may caused by multiple server\n");
     return;
   }
 
@@ -196,7 +198,7 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
 
     { // access to rsp_ should be in critical region
       LockGuard<CriticalLock> lg;
-      if (req_.__meta__.id.req == rsp_.__meta__.id.rsp) {
+      if (req_.match(rsp_)) {
         rsp = rsp_;
         rsp_ok = true;
       }
@@ -224,7 +226,7 @@ void ServiceT<Req, Rsp>::writeRsp(Server *srv, const Rsp &rsp) {
 
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeRsp(TransportBase *from_tsp, const MsgBase *rsp) {
-  writeRsp(*static_cast<Rsp *>(rsp));
+  writeRsp(*static_cast<const Rsp *>(rsp));
 }
 
 template <typename Req, typename Rsp>
@@ -237,33 +239,34 @@ void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
 }
 
 template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::updateServiceBroadcast(const MsgBase &sbc, int seq) {
+  LockGuard<CriticalLock> lg;
+  if (int8_t(seq - sbc_.__meta__.id.sbc.seq) > 0) {
+    sbc_ = sbc;
+    sbc_.__meta__.id.sbc.seq = seq;
+    return true;
+  }
+  return false;
+}
+
+template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::updateServiceBroadcast(TransportBase *tsp,
                                                 const MsgBase &sbc, int seq) {
-  if (tsp) {
-    auto &meta = tsp_metas_[tsp->id()];
-    if (meta) {
-      LockGuard<CriticalLock> lg;
-      if (int8_t(seq - sbc_.__meta__.id.sbc.seq) > 0) {
-        sbc_ = sbc;
-        sbc_.__meta__.id.sbc.seq = seq;
+  auto &meta = tsp_metas_[tsp->id()];
+  CHECK(meta);
 
-        if (sbc_.__meta__.id.sbc.dist < meta->dist) {
-          meta->dist = sbc_.__meta__.id.sbc.dist;
-          meta->sys_nxt = sbc_.__meta__.id.sbc.sys_from;
-        }
+  LockGuard<CriticalLock> lg;
+  bool better_dist = sbc.__meta__.id.sbc.dist < meta->dist;
+  int8_t seq_diff = seq - sbc_.__meta__.id.sbc.seq;
 
-        return true;
-      } else if (int8_t(seq - sbc_.__meta__.id.sbc.seq) == 0) {
-        // TODO:
-      }
+  if (seq_diff > 0 || (seq_diff == 0 && better_dist)) {
+    sbc_ = sbc;
+    sbc_.__meta__.id.sbc.seq = seq;
+    if (better_dist) {
+      meta->dist = sbc.__meta__.id.sbc.dist;
+      meta->sys_nxt = sbc.__meta__.id.sbc.sys_from;
     }
-  } else {
-    LockGuard<CriticalLock> lg;
-    if (int8_t(seq - sbc_.__meta__.id.sbc.seq) > 0) {
-      sbc_ = sbc;
-      sbc_.__meta__.id.sbc.seq = seq;
-      return true;
-    }
+    return true;
   }
 
   return false;
@@ -275,7 +278,7 @@ void ServiceT<Req, Rsp>::forwardServiceBroadcast(TransportBase *tsp_from,
   sbc.__meta__.id.sbc.sys_from = System::Id();
   for (auto &meta : tsp_metas_) {
     if (meta && meta->tsp != tsp_from) {
-      meta->tsp->sendServiceBroadcast(this, sbc);
+      meta->tsp->sendServiceAnnounce(this, sbc, -1);
     }
   }
 }

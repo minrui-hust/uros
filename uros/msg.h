@@ -31,6 +31,11 @@ struct __attribute__((packed)) ReqId {
   uint32_t service : 6;
   uint32_t client : 4;
   uint32_t seq : 4;
+
+  bool operator==(const ReqId &other) {
+    return (service == other.service) && (client == other.client) &&
+           (seq == other.seq);
+  }
 };
 static_assert(sizeof(ReqId) == 3);
 
@@ -54,7 +59,12 @@ struct MsgBase {
 static_assert(sizeof(MsgBase) == 4);
 
 struct ReqBase : MsgBase {
-  int32_t timeout;
+  mutable int32_t timeout;
+
+  bool match(const ReqBase &other) {
+    return __meta__.sys == other.__meta__.sys &&
+           __meta__.id.req == other.__meta__.id.rsp;
+  }
 };
 static_assert(sizeof(ReqBase) == 8);
 

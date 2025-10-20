@@ -90,7 +90,13 @@ template <typename Service>
 bool TransportBase::sendReq(Service *service, const typename Service::Req &req,
                             int timeout_ms) {
   req.timeout = timeout_ms; // NOTE: here we do not count the send delay
-  return send(&req, sizeof(Service::Req), 0, timeout_ms);
+  return send(&req, sizeof(req), 0, timeout_ms);
+}
+
+template <typename Service>
+bool TransportBase::sendServiceAnnounce(Service *service, const MsgBase &sbc,
+                                        int timeout_ms) {
+  return send(&sbc, sizeof(sbc), 0, timeout_ms);
 }
 
 inline void TransportBase::sendWork() {

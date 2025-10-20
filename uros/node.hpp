@@ -62,7 +62,7 @@ PublisherT<Msg> *Node::createPublisher(const char *topic_name) {
 template <typename TReq, typename TRsp>
 ClientT<TReq, TRsp> *Node::createClient(const char *service_name) {
   using Service = ServiceT<TReq, TRsp>;
-  using Client = ClientT<TRsp, TReq>;
+  using Client = ClientT<TReq, TRsp>;
 
   if (clis_.full()) {
     return nullptr;
@@ -75,7 +75,7 @@ ClientT<TReq, TRsp> *Node::createClient(const char *service_name) {
   }
 
   // add client via service, cause client is owned by service
-  auto cli = service.addClient();
+  auto cli = service->addClient();
   CHECK(cli);
 
   return static_cast<Client *>(clis_.emplace_back(cli));
@@ -99,7 +99,7 @@ Node::createServer(const char *service_name,
   }
 
   // add server via service, cause server is owned by service
-  auto srv = service.addServer(cb);
+  auto srv = service->addServer(cb);
   CHECK(srv);
 
   srv->bitMask() = (1 << subs_.size());

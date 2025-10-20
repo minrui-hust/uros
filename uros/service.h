@@ -83,8 +83,7 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   ServerT<Req, Rsp> *addServer(const ServiceCallback &cb);
 
-  template <typename Server>
-  void writeServiceBroadcast(Server *srv, const MsgBase sbc);
+  void writeServiceBroadcast(Server *srv, const MsgBase &sbc);
   void writeServiceBroadcast(TransportBase *tsp, const MsgBase *sbc) override;
 
   // call the service
@@ -107,6 +106,7 @@ protected:
   bool onServering() const { return srvs_.size() > 0; }
   void writeRsp(const Rsp &rsp);
 
+  bool updateServiceBroadcast(const MsgBase &sbc, int seq);
   bool updateServiceBroadcast(TransportBase *tsp, const MsgBase &sbc, int seq);
   void forwardServiceBroadcast(TransportBase *tsp, const MsgBase &sbc);
 

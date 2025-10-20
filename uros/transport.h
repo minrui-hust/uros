@@ -39,6 +39,10 @@ struct TransportBase {
   bool sendReq(Service *service, const typename Service::Req &req,
                int timeout_ms);
 
+  template <typename Service>
+  bool sendServiceAnnounce(Service *service, const MsgBase &sbc,
+                           int timeout_ms);
+
   virtual ~TransportBase() = default;
 
 protected:
