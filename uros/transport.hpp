@@ -90,6 +90,7 @@ template <typename Service>
 bool TransportBase::sendReq(Service *service, const typename Service::Req &req,
                             int timeout_ms) {
   req.timeout = timeout_ms; // NOTE: here we do not count the send delay
+  req.__meta__.id.req.sys_from = System::Id();
   return send(&req, sizeof(req), 0, timeout_ms);
 }
 
@@ -133,11 +134,22 @@ inline void TransportBase::recvWork() {
       if (msg->__meta__.id.req.sys_to ==
           System::Id()) { // drop broadcast req not belong to this system
         recvRequest(msg, len);
+      } else {
+        UROS_PRINT("drop req not blong to sys '%d'\n", System::Id());
       }
     } else if (msg->__meta__.type == MsgType::MsgTypeResponse) {
-      if (msg->__meta__.id.req.sys_to ==
+      if (msg->__meta__.id.rsp.sys_to ==
           System::Id()) { // drop broadcast req not belong to this system
         recvResponse(msg, len);
+      } else {
+        const auto &rsp = *static_cast<ReqBase *>(msg);
+        UROS_PRINT(
+            "drop rsp not blong to sys '%d':type(%d), sys(%d), "
+            "sys_from(%d), sys_to(%d), service(%d), client(%d), seq(%d)\n",
+            System::Id(), rsp.__meta__.type, rsp.__meta__.sys,
+            rsp.__meta__.id.rsp.sys_from, rsp.__meta__.id.rsp.sys_to,
+            rsp.__meta__.id.rsp.service, rsp.__meta__.id.rsp.client,
+            rsp.__meta__.id.rsp.seq);
       }
     } else {
       UROS_PRINT("Unknow msg type: %d\n", msg->__meta__.type);
@@ -152,6 +164,23 @@ inline void TransportBase::serviceWork() {
         service_metas_[req_buf_.msg.__meta__.id.req.service]->service;
     if (service->call(this, &req_buf_.msg, &rsp_buf_.msg,
                       req_buf_.msg.timeout)) {
+
+      // set sys_from and sys_to, so we can route back rsp to where req from
+      rsp_buf_.msg.__meta__.id.rsp.sys_from = System::Id();
+      rsp_buf_.msg.__meta__.id.rsp.sys_to =
+          req_buf_.msg.__meta__.id.req.sys_from;
+
+      UROS_PRINT("remote call request done with rsp: type(%d), sys(%d), "
+                 "sys_from(%d), "
+                 "sys_to(%d), service(%d), "
+                 "client(%d), seq(%d)\n",
+                 rsp_buf_.msg.__meta__.type, rsp_buf_.msg.__meta__.sys,
+                 rsp_buf_.msg.__meta__.id.rsp.sys_from,
+                 rsp_buf_.msg.__meta__.id.rsp.sys_to,
+                 rsp_buf_.msg.__meta__.id.rsp.service,
+                 rsp_buf_.msg.__meta__.id.rsp.client,
+                 rsp_buf_.msg.__meta__.id.rsp.seq);
+
       send(rsp_buf_.data, service->rspSize(), -1);
     }
   }

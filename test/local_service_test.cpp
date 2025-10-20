@@ -17,6 +17,8 @@ struct RspAdd2 : uros::RspBase {
 };
 
 void uros_init() {
+  uros::SetSystemId(0);
+
   uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
 
   uros::Init();
@@ -57,9 +59,10 @@ int main() {
     } else {
       std::cout << "call remote add2 failed" << std::endl;
     }
+
     std::this_thread::sleep_for(1000ms);
+    ++req.a;
   }
 
   return 0;
 }
-

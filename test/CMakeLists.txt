@@ -13,3 +13,6 @@ add_executable(remote_test_consumer remote_test_consumer.cpp)
 # tests for service
 add_executable(local_service_test local_service_test.cpp)
 
+add_executable(remote_service_server remote_service_server.cpp)
+add_executable(remote_service_client remote_service_client.cpp)
+

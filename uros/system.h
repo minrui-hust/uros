@@ -19,7 +19,7 @@ protected:
   System &operator=(const System &) = delete;
 
 protected:
-  int id_;
+  int id_ = -1;
 };
 
 } // namespace uros

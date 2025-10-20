@@ -4,6 +4,7 @@
 
 #include "msg.h"
 #include "subscription.h"
+#include "system.h"
 
 namespace uros {
 
@@ -21,7 +22,14 @@ template <typename TReq, typename TRsp> struct ServerT : ServerBase {
   using Service = ServiceT<TReq, TRsp>;
   using ServiceCallback = typename Service::ServiceCallback;
 
-  ServerT(int id) : ServerBase(id) {}
+  ServerT(int id) : ServerBase(id) {
+    sbc_.__meta__.type = MsgTypeServiceBroadcast;
+    sbc_.__meta__.sys = System::Id();
+    sbc_.__meta__.id.sbc.sys_from = System::Id();
+    sbc_.__meta__.id.sbc.dist = 0;
+
+    rsp_.__meta__.type = MsgTypeResponse;
+  }
 
   void bind(Service *service, const ServiceCallback &cb);
 

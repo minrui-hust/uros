@@ -65,6 +65,7 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(const ServiceCallback &cb) {
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(Client *cli, const Req &req, Rsp &rsp,
                               int timeout_ms) {
+  UROS_PRINT("call service '%d' from client '%d'\n", id_, cli->id());
   if (onServering()) {
     return localCall(req, rsp, timeout_ms);
   } else {
@@ -86,10 +87,16 @@ bool ServiceT<Req, Rsp>::call(TransportBase *tsp, const MsgBase *req,
 
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::localCall(const Req &req, Rsp &rsp, int timeout_ms) {
+  UROS_PRINT("localCall on service '%d'\n", id_);
+
   auto enter_ms = now_ms();
 
   // take lock_req_, caused we only allow one access at same time
   LockGuard<Mutex> lg(lock_req_, timeout_now(timeout_ms, enter_ms));
+  if (!lg.locked()) {
+    UROS_PRINT("localCall failed to get req lock\n");
+    return false;
+  }
 
   writeReq(req);
 
@@ -115,7 +122,7 @@ bool ServiceT<Req, Rsp>::remoteCall(TransportBase *from_tsp, const Req &req,
   }
 
   // send request via transport
-  req.__meta__.id.req.sys_from = System::Id();
+  // req.__meta__.id.req.sys_from = System::Id(); from should set by transport
   req.__meta__.id.req.sys_to = meta->sys_nxt;
   if (!meta->tsp->sendReq(this, req, timeout_now(timeout_ms, enter_ms))) {
     return false;
@@ -154,6 +161,9 @@ void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv,
                                                const MsgBase &sbc) {
   if (updateServiceBroadcast(sbc, sbc.__meta__.id.sbc.seq)) {
     forwardServiceBroadcast(nullptr, sbc);
+  } else {
+    UROS_PRINT("local updateServiceBroadcast failed: seq(%d)\n",
+               sbc.__meta__.id.sbc.seq);
   }
 }
 
@@ -168,11 +178,15 @@ void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
 
   if (updateServiceBroadcast(tsp, *sbc, sbc->__meta__.id.sbc.seq)) {
     forwardServiceBroadcast(tsp, *sbc);
+  } else {
+    UROS_PRINT("remote updateServiceBroadcast failed: seq(%d)\n",
+               sbc->__meta__.id.sbc.seq);
   }
 }
 
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeReq(const Req &req) {
+  UROS_PRINT("service '%d' writeReq\n", id_);
   {
     LockGuard<CriticalLock> lg;
     req_ = req;
@@ -189,6 +203,7 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
   bool rsp_ok = false;
   do {
     if (!sem_rsp_.take(timeout_now(timeout_ms, enter_ms))) {
+      UROS_PRINT("waitRsp timeout\n");
       return false;
     }
 
@@ -201,6 +216,14 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
       if (req_.match(rsp_)) {
         rsp = rsp_;
         rsp_ok = true;
+      } else {
+        UROS_PRINT("waitRsp req&rsp mismatch:\n");
+        UROS_PRINT("req: sys(%d), service(%d), client(%d), seq(%d)\n",
+                   req_.__meta__.sys, req_.__meta__.id.req.service,
+                   req_.__meta__.id.req.client, req_.__meta__.id.req.seq);
+        UROS_PRINT("rsp: sys(%d), service(%d), client(%d), seq(%d)\n",
+                   rsp_.__meta__.sys, rsp_.__meta__.id.rsp.service,
+                   rsp_.__meta__.id.rsp.client, rsp_.__meta__.id.rsp.seq);
       }
     }
   } while (!rsp_ok);

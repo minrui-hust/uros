@@ -102,7 +102,7 @@ Node::createServer(const char *service_name,
   auto srv = service->addServer(cb);
   CHECK(srv);
 
-  srv->bitMask() = (1 << subs_.size());
+  srv->setupEvent(&evt_, subs_.size());
   wait_set_ |= srv->bitMask();
 
   return static_cast<Server *>(subs_.emplace_back(srv));

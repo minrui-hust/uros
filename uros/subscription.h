@@ -16,10 +16,12 @@ struct SubscriptionBase {
     bit_mask_ = 1 << bit_idx;
   }
 
-  auto &bitMask() { return bit_mask_; }
   const auto &bitMask() const { return bit_mask_; }
 
-  void notify() { evt_->set(bit_mask_); }
+  void notify() {
+    UROS_PRINT("sub(srv) '%d' notified\n", id_);
+    evt_->set(bit_mask_);
+  }
 
   virtual void spinOnce() = 0;
 

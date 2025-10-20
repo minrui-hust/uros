@@ -32,10 +32,9 @@ template <typename Transport> static auto RegisterTransport() {
   return TransportManager::AddTransport<Transport>();
 }
 
-static void Init(int sys_id = -1) {
-  // set system id
-  System::Id() = sys_id;
+static void SetSystemId(int sys_id) { System::Id() = sys_id; }
 
+static void Init() {
   // init the transports
   TransportManager::Init();
 
