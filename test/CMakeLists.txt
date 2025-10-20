@@ -16,3 +16,7 @@ add_executable(local_service_test local_service_test.cpp)
 add_executable(remote_service_server remote_service_server.cpp)
 add_executable(remote_service_client remote_service_client.cpp)
 
+# multicast service tests
+add_executable(multicast_service_server multicast_service_server.cpp)
+add_executable(multicast_service_client multicast_service_client.cpp)
+
