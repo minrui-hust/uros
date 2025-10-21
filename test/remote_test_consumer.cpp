@@ -1,6 +1,6 @@
+#include <chrono>
 #include <iostream>
 #include <thread>
-#include <chrono>
 
 #include "uros/transport_socket.hpp"
 #include "uros/uros.h"
@@ -16,25 +16,25 @@ struct SensorData : uros::MsgBase {
 };
 
 void uros_init() {
+  uros::InitGuard g(0);
+
   // 注册 topic
   uros::RegisterTopic<SensorData>("/sensor_data", 0);
-  
+
   // config each transport
   // Transport 1: 从 Relay (10003) 接收数据，监听 10004
   auto transport = uros::RegisterTransport<uros::TransportSocket>();
   transport->initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
   transport->declareTopic("/sensor_data");
-  
-  uros::Init();
 }
 
 int main() {
   std::cout << "=== Data Consumer (Port 10004) ===" << std::endl;
-  
+
   uros_init();
 
   uros::Node consumer_node;
-  
+
   // 订阅传感器数据
   auto data_sub = consumer_node.createSubscription<SensorData>(
       "/sensor_data", [](const SensorData &msg) {
@@ -47,8 +47,9 @@ int main() {
       });
   assert(data_sub);
 
-  std::cout << "Consumer node ready, waiting for data from Relay..." << std::endl;
-  
+  std::cout << "Consumer node ready, waiting for data from Relay..."
+            << std::endl;
+
   // Consumer 线程：处理接收到的消息
   consumer_node.spin();
 

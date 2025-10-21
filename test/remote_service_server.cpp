@@ -16,7 +16,7 @@ struct RspAdd2 : uros::RspBase {
 };
 
 void uros_init() {
-  uros::SetSystemId(1); // 远程端使用不同的系统ID
+  uros::InitGuard g(1);
 
   uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
 
@@ -24,8 +24,6 @@ void uros_init() {
   auto transport_udp = uros::RegisterTransport<uros::TransportSocket>();
   transport_udp->initSocket("127.0.0.1", 10002, "127.0.0.1", 10001);
   transport_udp->declareService("/add2");
-
-  uros::Init();
 }
 
 int main() {

@@ -17,7 +17,7 @@ struct RspAdd2 : uros::RspBase {
 };
 
 void uros_init(int client_id) {
-  uros::SetSystemId(client_id);
+  uros::InitGuard g(client_id);
 
   uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
 
@@ -28,8 +28,6 @@ void uros_init(int client_id) {
   // 发送端口自动获取
   transport_multicast->initSocket("239.0.0.2");
   transport_multicast->declareService("/add2");
-
-  uros::Init();
 }
 
 int main(int argc, char *argv[]) {

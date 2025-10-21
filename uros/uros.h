@@ -41,4 +41,10 @@ static void Init() {
   // TODO: maybe other work
 }
 
+struct InitGuard {
+  InitGuard(int sys) { SetSystemId(sys); }
+
+  ~InitGuard() { Init(); }
+};
+
 } // namespace uros
