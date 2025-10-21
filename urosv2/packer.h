@@ -1,12 +1,34 @@
 #include <cstdint>
 #include <cstring>
 
+#include "etl/vector.h"
+
+struct PackerBuf {
+  uint32_t len;
+  uint8_t data[128];
+};
+
+struct __attribute__((aligned(4))) Header {
+  uint8_t preamble_1;
+  uint8_t preamble_2;
+  uint8_t seq_id;
+};
+
+// #pragma pack(push, 4)
+// struct header {
+//   uint8_t preamble_1;
+//   uint8_t preamble_2;
+//   uint8_t seq_id;
+// }
+// #pragma pack(pop)
+
 // 数据包定义
 class PacketParser {
 private:
   enum ParserState {
     STATE_PREAMBLE_1,  // 寻找第一个'$'
     STATE_PREAMBLE_2,  // 寻找第二个'$'
+    STATE_SEQ_ID,      // id
     STATE_LENGTH_HIGH, // 读取长度高字节
     STATE_LENGTH_LOW,  // 读取长度低字节
     STATE_PAYLOAD,     // 读取数据载荷
@@ -26,13 +48,18 @@ private:
   ParserState state_;
 
 public:
-  uint16_t expected_length_; // 期望的数据长度
-  uint16_t current_length_;  // 当前已接收数据长度
-  uint32_t received_crc_;    // 接收到的CRC值
-  uint32_t calculated_crc_;  // 计算得到的CRC值
+  uint16_t expected_length; // 期望的数据长度
+  uint16_t current_length;  // 当前已接收数据长度
+  uint32_t received_crc;    // 接收到的CRC值
+  uint32_t calculated_crc;  // 计算得到的CRC值
+  uint8_t current_seq_id;   // 当前数据包的序列号
 
-  uint8_t packet_buffer_[BUFFER_SIZE]; // 内部数据包缓冲区
-  uint16_t buffer_index_;              // 缓冲区索引
+  uint8_t data_buffer[BUFFER_SIZE]; // 内部数据包缓冲区
+  uint16_t buffer_index;            // 缓冲区索引
+
+  PackerBuf buf[4] = {0};
+  uint8_t buf_start = 0;
+  uint8_t buf_end = 0;
 
 public:
   // 回调函数类型定义
@@ -40,12 +67,13 @@ public:
 
 private:
   PacketCallback packet_callback_;
+  uint32_t send_seq_id_ = 0;
 
 public:
   // 构造函数简化，无需外部传入缓冲区
   PacketParser(PacketCallback callback = nullptr)
-      : state_(STATE_PREAMBLE_1), expected_length_(0), current_length_(0),
-        received_crc_(0), calculated_crc_(0), buffer_index_(0),
+      : state_(STATE_PREAMBLE_1), expected_length(0), current_length(0),
+        received_crc(0), calculated_crc(0), current_seq_id(0), buffer_index(0),
         packet_callback_(callback) {}
 
   // 获取最大数据包大小
@@ -54,11 +82,11 @@ public:
   // 重置解析器状态
   void reset() {
     state_ = STATE_PREAMBLE_1;
-    expected_length_ = 0;
-    current_length_ = 0;
-    received_crc_ = 0;
-    calculated_crc_ = 0;
-    buffer_index_ = 0;
+    expected_length = 0;
+    current_length = 0;
+    received_crc = 0;
+    calculated_crc = 0;
+    buffer_index = 0;
   }
 
   // CRC32计算函数
@@ -84,46 +112,51 @@ public:
     case STATE_PREAMBLE_1:
       if (byte == '$') {
         state_ = STATE_PREAMBLE_2;
-        buffer_index_ = 0;
+        buffer_index = 0;
       }
       break;
 
     case STATE_PREAMBLE_2:
       if (byte == '$') {
-        state_ = STATE_LENGTH_HIGH;
+        state_ = STATE_SEQ_ID;
       } else {
         reset(); // 不是预期的'$'，重置
       }
       break;
 
+    case STATE_SEQ_ID:       // 新增：读取序列号
+      current_seq_id = byte; // 存储序列号
+      state_ = STATE_LENGTH_HIGH;
+      break;
+
     case STATE_LENGTH_HIGH:
-      expected_length_ = byte; // 长度低字节
+      expected_length = byte; // 长度低字节
       state_ = STATE_LENGTH_LOW;
       break;
 
     case STATE_LENGTH_LOW:
-      expected_length_ |= byte << 8; // 长度高字节
+      expected_length |= byte << 8; // 长度高字节
 
       // 验证长度是否合理
-      if (expected_length_ == 0 || expected_length_ > MAX_PACKET_SIZE) {
+      if (expected_length == 0 || expected_length > MAX_PACKET_SIZE) {
         reset(); // 长度无效，重置
         break;
       }
 
       state_ = STATE_PAYLOAD;
-      current_length_ = 0;
+      current_length = 0;
       break;
 
     case STATE_PAYLOAD:
       // 存储数据载荷
-      if (buffer_index_ < BUFFER_SIZE) {
-        packet_buffer_[buffer_index_++] = byte;
-        current_length_++;
+      if (buffer_index < BUFFER_SIZE) {
+        data_buffer[buffer_index++] = byte;
+        current_length++;
 
         // 检查是否接收完所有数据
-        if (current_length_ >= expected_length_) {
+        if (current_length >= expected_length) {
           state_ = STATE_CRC_1;
-          received_crc_ = 0;
+          received_crc = 0;
         }
       } else {
         reset(); // 缓冲区溢出，重置
@@ -131,22 +164,22 @@ public:
       break;
 
     case STATE_CRC_1:
-      received_crc_ = byte;
+      received_crc = byte;
       state_ = STATE_CRC_2;
       break;
 
     case STATE_CRC_2:
-      received_crc_ |= byte << 8;
+      received_crc |= byte << 8;
       state_ = STATE_CRC_3;
       break;
 
     case STATE_CRC_3:
-      received_crc_ |= byte << 16;
+      received_crc |= byte << 16;
       state_ = STATE_CRC_4;
       break;
 
     case STATE_CRC_4:
-      received_crc_ |= byte << 24;
+      received_crc |= byte << 24;
       state_ = STATE_END_1;
       break;
 
@@ -163,23 +196,24 @@ public:
         // 完整的包接收完成，进行CRC校验
 
         // 计算CRC（对长度字段和数据载荷进行校验）
-        uint8_t crc_buffer[2 + expected_length_];
-        crc_buffer[0] = expected_length_ & 0xFF;        // 长度低字节
-        crc_buffer[1] = (expected_length_ >> 8) & 0xFF; // 长度高字节
-        memcpy(crc_buffer + 2, packet_buffer_, expected_length_); // 数据载荷
+        uint8_t crc_buffer[2 + expected_length];
+        crc_buffer[0] = expected_length & 0xFF;               // 长度低字节
+        crc_buffer[1] = (expected_length >> 8) & 0xFF;        // 长度高字节
+        memcpy(crc_buffer + 2, data_buffer, expected_length); // 数据载荷
 
-        calculated_crc_ = calculateCRC32(crc_buffer, 2 + expected_length_);
+        calculated_crc = calculateCRC32(crc_buffer, 2 + expected_length);
 
-        if (calculated_crc_ == received_crc_) {
+        if (calculated_crc == received_crc) {
 
           // CRC校验通过
           //   if (packet_callback_) {
-          //     packet_callback_(packet_buffer_, expected_length_);
+          //     packet_callback_(data_buffer, expected_length);
           //   }
           //   reset();
           return true; // 成功解析一个完整的数据包
         } else {
           // CRC校验失败
+          //   std::cout << "crc error': " << std::endl;
           reset();
         }
       } else {
@@ -212,7 +246,7 @@ public:
                        uint8_t *packet_buffer, uint16_t buffer_size) {
     // 计算所需缓冲区大小
     uint16_t packet_size =
-        2 + 2 + data_length + 4 + 2; // $$ + 长度 + 数据 + CRC + ##
+        2 + 1 + 2 + data_length + 4 + 2; // $$ + 长度 + 数据 + CRC + ##
 
     if (packet_size > buffer_size) {
       return 0; // 缓冲区不足
@@ -223,6 +257,9 @@ public:
     // 1. 前导码：$$（固定字节，无字节序问题）
     packet_buffer[index++] = '$';
     packet_buffer[index++] = '$';
+
+    //  序列号（1字节）
+    packet_buffer[index++] = send_seq_id_++;
 
     // 2. 数据长度（2字节，STM32小端 - 直接存储）
     // 在STM32小端系统中，直接memcpy即可
@@ -238,7 +275,7 @@ public:
     // 4. CRC32校验（4字节，STM32小端 - 直接存储）
     // 准备CRC计算的数据（长度字段 + 数据载荷）
     uint8_t crc_data[2 + data_length];
-    memcpy(crc_data, &data_length, sizeof(data_length)); // 直接拷贝长度（小端）
+    memcpy(crc_data, &data_length, sizeof(data_length)); //直接拷贝长度（小端）
     if (data_length > 0 && data != nullptr) {
       memcpy(&crc_data[2], data, data_length);
     }
@@ -265,8 +302,83 @@ public:
   ParserState getState() const { return state_; }
 
   // 获取当前期望的数据长度（用于调试）
-  uint16_t getExpectedLength() const { return expected_length_; }
+  uint16_t getExpectedLength() const { return expected_length; }
 
   // 获取当前已接收的数据长度（用于调试）
-  uint16_t getCurrentLength() const { return current_length_; }
+  uint16_t getCurrentLength() const { return current_length; }
+
+  //读写buf操作
+  // 判断缓冲区是否已满
+  bool isBufferFull() { return ((buf_end + 1) % 4) == buf_start; }
+
+  // 判断缓冲区是否为空
+  bool isBufferEmpty() { return buf_start == buf_end; }
+
+  // 获取缓冲区中可用的数据包数量
+  uint8_t getBufferCount() {
+    if (buf_end >= buf_start) {
+      return buf_end - buf_start;
+    } else {
+      return 4 - (buf_start - buf_end);
+    }
+  }
+
+  // 写入数据到缓冲区
+  int32_t write_buf(uint8_t *data, uint32_t len) {
+    // 检查缓冲区是否有空位
+    if (isBufferFull()) {
+      return -1; // 缓冲区已满
+    }
+
+    // 检查数据长度是否超过缓冲区限制
+    if (len > 128) {
+      return -2; // 数据过长
+    }
+
+    // 检查输入参数有效性
+    if (data == nullptr && len > 0) {
+      return -3; // 数据指针无效
+    }
+
+    // 将数据和长度写入当前缓冲区位置
+    buf[buf_end].len = len;
+    if (len > 0 && data != nullptr) {
+      memcpy(buf[buf_end].data, data, len);
+    }
+
+    // 更新缓冲区结束指针
+    buf_end = (buf_end + 1) % 4;
+
+    return len; // 返回实际写入的数据长度
+  }
+
+  // 从缓冲区读取数据
+  int32_t read_buf(uint8_t *data, uint32_t len) {
+    // 检查缓冲区是否有数据可读
+    if (isBufferEmpty()) {
+      return -1; // 缓冲区为空
+    }
+
+    // 检查输出缓冲区是否足够大
+    if (len < buf[buf_start].len) {
+      return -2; // 提供的缓冲区太小
+    }
+
+    // 检查输出参数有效性
+    if (data == nullptr && buf[buf_start].len > 0) {
+      return -3; // 输出缓冲区指针无效
+    }
+
+    uint32_t data_len = buf[buf_start].len;
+
+    // 将数据复制到输出缓冲区
+    if (data_len > 0 && data != nullptr) {
+      memcpy(data, buf[buf_start].data, data_len);
+    }
+
+    // 更新缓冲区开始指针
+    buf_start = (buf_start + 1) % 4;
+
+    return data_len; // 返回实际读取的数据长度
+  }
 };
