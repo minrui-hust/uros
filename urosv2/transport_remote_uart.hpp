@@ -11,6 +11,7 @@ void handlePacket(const uint8_t *data, uint16_t length) {
   printf("\n");
 }
 uint32_t send_count = 0;
+uint32_t total_send_len = 0;
 uint32_t recv_count = 0;
 uint32_t unpack_count = 0;
 uint32_t unpacke_err = 0;
@@ -41,8 +42,10 @@ inline int TransportRemoteUart::send(const void *data, size_t len, int prio,
   //封包
   uint32_t packer_size =
       packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
-
-  return uart_->send((const char *)send_buf_, packer_size, timeout_ms);
+  uint32_t send_len =
+      uart_->send((const char *)send_buf_, packer_size, timeout_ms);
+  total_send_len += send_len;
+  return send_len;
 }
 
 inline int TransportRemoteUart::recv(void *data, size_t len, int *prio,
