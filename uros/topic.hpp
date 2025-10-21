@@ -6,82 +6,113 @@
 
 #include "publisher.h"
 #include "subscription.h"
+#include "transport.h"
 
 namespace uros {
 
-template <typename TransportManager, typename TMsg>
-void TopicT<TransportManager, TMsg>::write(const TMsg &msg) {
-  // iterate on all transport
-  [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    (([&]() {
-       using TransportType =
-           typename TransportManager::template TransportType<Is>;
-       auto tsp = static_cast<TransportType *>(transports_[Is]);
-       if (tsp != nullptr) {
-         tsp->write(this, msg);
-       }
-     }()),
-     ...);
-  }
-  (std::make_index_sequence<TransportManager::size>{});
-}
-
-template <typename TransportManager, typename TMsg>
-bool TopicT<TransportManager, TMsg>::read(TMsg &msg, int32_t &gen) {
-  LockGuard<CriticalLock> guard;
-  if (generation_ <= gen) {
+inline bool TopicBase::registerTransport(TransportBase *tsp) {
+  auto tsp_id = tsp->id();
+  if (tsp_id > tsps_.size()) {
     return false;
   }
-  msg = msg_;
-  gen = generation_;
+
+  if (tsps_[tsp_id]) {
+    UROS_PRINT("tsp '%d' already register on topic %d \n", tsp_id, id_);
+    return false;
+  }
+
+  tsps_[tsp_id] = tsp;
+
   return true;
 }
 
-template <typename TransportManager, typename TMsg>
-void TopicT<TransportManager, TMsg>::update(const TMsg &msg) {
-  { // copy msg in critical section
-    LockGuard<CriticalLock> guard;
+template <typename Msg> PublisherT<Msg> *TopicT<Msg>::addPublisher() {
+  if (pubs_.full()) {
+    return nullptr;
+  }
+
+  auto pub = new PublisherT<Msg>(pubs_.size());
+  CHECK(pub);
+
+  pub->advertise(this);
+  pubs_.emplace_back(pub);
+
+  return pub;
+}
+
+template <typename Msg>
+SubscriptionT<Msg> *
+TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
+  if (subs_.full()) {
+    return nullptr;
+  }
+
+  auto sub = new SubscriptionT<Msg>(subs_.size());
+  CHECK(sub);
+
+  sub->subscribe(this, cb);
+  subs_.emplace_back(sub);
+
+  return sub;
+}
+
+template <typename TMsg>
+void TopicT<TMsg>::write(PublisherBase *pub, const TMsg &msg) {
+  static int seq = 0;
+  msg.__meta__.type = MsgTypeNormal;
+  msg.__meta__.id.msg.topic = id_;
+  if (update(msg, seq++)) {
+    notify(nullptr);
+  }
+}
+
+template <typename TMsg>
+void TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
+  if (update(*static_cast<const TMsg *>(msg), msg->__meta__.id.msg.seq)) {
+    notify(tsp);
+  }
+}
+
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &seq) {
+  LockGuard<CriticalLock> lg;
+  if (int16_t(msg_.__meta__.id.msg.seq - seq) > 0) {
+    msg = msg_;
+    seq = msg_.__meta__.id.msg.seq;
+    return true;
+  }
+  return false;
+}
+
+template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int &seq) {
+  return read(*static_cast<TMsg *>(msg), seq);
+}
+
+template <typename TMsg> bool TopicT<TMsg>::update(const TMsg &msg, int seq) {
+  LockGuard<CriticalLock> lg;
+  if (int16_t(seq - msg_.__meta__.id.msg.seq) > 0) {
     msg_ = msg;
-    ++generation_;
+    msg_.__meta__.id.msg.seq = seq;
+    return true;
   }
-
-  // notify subscriber to consume it
-  // this should be done before route msg,
-  // cause higher priority task may be waken
-  for (auto i = 0u; i < subs_.size(); ++i) {
-    subs_[i]->notify();
-  }
+  return false;
 }
 
-template <typename TransportManager, typename TMsg>
-void TopicT<TransportManager, TMsg>::recv(const int32_t tsp_id,
-                                          const MsgBase *msg) {
-
-  // iterate on all transport
-  [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-    (([&]() {
-       using TransportType =
-           typename TransportManager::template TransportType<Is>;
-       auto tsp = static_cast<TransportType *>(transports_[Is]);
-       if (tsp != nullptr && tsp->id() != tsp_id) {
-         tsp->write(this, *static_cast<const TMsg *>(msg));
-       }
-     }()),
-     ...);
+template <typename TMsg> void TopicT<TMsg>::notify(TransportBase *from_tsp) {
+  // first notify subs, cause higher prior work may waken
+  for (auto &sub : subs_) {
+    sub->notify();
   }
-  (std::make_index_sequence<TransportManager::size>{});
-}
 
-template <typename TransportManager, typename TMsg>
-void TopicT<TransportManager, TMsg>::setTransport(const int32_t tsp_id,
-                                                  TransportInterface *tsp) {
-  if ((size_t)tsp_id < transports_.size()) {
-    transports_[tsp_id] = tsp;
+  // then notify tsps
+  for (auto &tsp : tsps_) {
+    if (tsp && tsp != from_tsp) {
+      tsp->notify(this);
+    }
   }
 }
 
 template <typename Topic>
-Topic *TopicManager::addTopic(const char *name, int32_t id) {
+Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
   if ((size_t)id >= topics_.size()) {
     return nullptr;
   }
@@ -89,13 +120,15 @@ Topic *TopicManager::addTopic(const char *name, int32_t id) {
   auto &topic = topics_[id];
   if (topic) {
     if (topic->id() == id && strcmp(topic->name(), name) == 0) {
+      UROS_PRINT("topic '%s' already added with same type\n", name);
       return static_cast<Topic *>(topic.get());
     } else {
+      UROS_PRINT("topic '%s' already added with different type\n", name);
       return nullptr;
     }
   }
 
-  topic = std::make_unique<Topic>(name, id);
+  topic = etl::unique_ptr(new Topic(name, id, prio));
   CHECK(topic);
 
   return static_cast<Topic *>(topic.get());
@@ -104,7 +137,7 @@ Topic *TopicManager::addTopic(const char *name, int32_t id) {
 template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
   for (auto i = 0u; i < topics_.size(); ++i) {
     auto &tp = topics_[i];
-    if (tp != nullptr && strcmp(tp->name(), name) == 0) {
+    if (tp.get() != nullptr && strcmp(tp->name(), name) == 0) {
       if constexpr (std::is_same_v<Topic, TopicBase>) {
         return tp.get();
       } else {

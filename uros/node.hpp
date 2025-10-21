@@ -3,19 +3,18 @@
 #include "node.h"
 
 #include "publisher.h"
-#include "server.h"
+#include "service.h"
 #include "subscription.h"
 #include "topic.h"
 
 namespace uros {
 
-template <typename TransportManager>
-template <typename TMsg>
-SubscriptionT<TransportManager, TMsg> *
-NodeT<TransportManager>::createSubscription(
-    const char *topic_name, const std::function<void(const TMsg &)> &cb) {
-  using Topic = TopicT<TransportManager, TMsg>;
-  using Subscription = SubscriptionT<TransportManager, TMsg>;
+template <typename Msg>
+SubscriptionT<Msg> *
+Node::createSubscription(const char *topic_name,
+                         const std::function<void(const Msg &)> &cb) {
+  using Topic = TopicT<Msg>;
+  using Subscription = SubscriptionT<Msg>;
 
   if (subs_.full()) {
     return nullptr;
@@ -27,26 +26,21 @@ NodeT<TransportManager>::createSubscription(
     return nullptr;
   }
 
-  auto sub = std::make_unique<Subscription>(&evt_, subs_.size());
+  // add subscription via topic, cause subscription is owned by topic
+  auto sub = topic->addSubscription(cb);
   CHECK(sub);
 
-  sub->subscribe(topic, cb);
-
-  if (!topic->registerSubscription(sub.get())) {
-    return nullptr;
-  }
-
+  // set notification bit mask
+  sub->setupEvent(&evt_, subs_.size());
   wait_set_ |= sub->bitMask();
 
-  return static_cast<Subscription *>(subs_.emplace_back(std::move(sub)).get());
+  return static_cast<Subscription *>(subs_.emplace_back(sub));
 }
 
-template <typename TransportManager>
-template <typename TMsg>
-PublisherT<TransportManager, TMsg> *
-NodeT<TransportManager>::createPublisher(const char *topic_name) {
-  using Topic = TopicT<TransportManager, TMsg>;
-  using Publisher = PublisherT<TransportManager, TMsg>;
+template <typename Msg>
+PublisherT<Msg> *Node::createPublisher(const char *topic_name) {
+  using Topic = TopicT<Msg>;
+  using Publisher = PublisherT<Msg>;
 
   if (pubs_.full()) {
     return nullptr;
@@ -58,24 +52,17 @@ NodeT<TransportManager>::createPublisher(const char *topic_name) {
     return nullptr;
   }
 
-  auto pub = std::make_unique<Publisher>();
+  // add publisher via topic, cause publisher is owned by topic
+  auto pub = topic->addPublisher();
   CHECK(pub);
 
-  pub->advertise(topic);
-
-  if (!topic->registerPublisher(pub.get())) {
-    return nullptr;
-  }
-
-  return static_cast<Publisher *>(pubs_.emplace_back(std::move(pub)).get());
+  return static_cast<Publisher *>(pubs_.emplace_back(pub));
 }
 
-template <typename TransportManager>
 template <typename TReq, typename TRsp>
-ClientT<TransportManager, TReq, TRsp> *
-NodeT<TransportManager>::createClient(const char *service_name) {
-  using Service = ServiceT<TransportManager, TReq, TRsp>;
-  using Client = ClientT<TransportManager, TRsp, TReq>;
+ClientT<TReq, TRsp> *Node::createClient(const char *service_name) {
+  using Service = ServiceT<TReq, TRsp>;
+  using Client = ClientT<TRsp, TReq>;
 
   if (clis_.full()) {
     return nullptr;
@@ -87,25 +74,19 @@ NodeT<TransportManager>::createClient(const char *service_name) {
     return nullptr;
   }
 
-  auto cli = std::make_unique<Client>();
+  // add client via service, cause client is owned by service
+  auto cli = service.addClient();
   CHECK(cli);
 
-  cli->connect(service);
-
-  if (!service->registerClient(cli.get())) {
-    return nullptr;
-  }
-
-  return static_cast<Client *>(clis_.emplace_back(std::move(cli)).get());
+  return static_cast<Client *>(clis_.emplace_back(cli));
 }
 
-template <typename TransportManager>
 template <typename TReq, typename TRsp>
-ServerT<TransportManager, TReq, TRsp> *NodeT<TransportManager>::createServer(
-    const char *service_name,
-    const std::function<void(const TReq &, TRsp &)> &cb) {
-  using Service = ServiceT<TransportManager, TReq, TRsp>;
-  using Server = ServerT<TransportManager, TReq, TRsp>;
+ServerT<TReq, TRsp> *
+Node::createServer(const char *service_name,
+                   const std::function<void(const TReq &, TRsp &)> &cb) {
+  using Service = ServiceT<TReq, TRsp>;
+  using Server = ServerT<TReq, TRsp>;
 
   if (subs_.full()) {
     return nullptr;
@@ -117,28 +98,23 @@ ServerT<TransportManager, TReq, TRsp> *NodeT<TransportManager>::createServer(
     return nullptr;
   }
 
-  auto srv = std::make_unique<Server>(&evt_, subs_.size());
+  // add server via service, cause server is owned by service
+  auto srv = service.addServer(cb);
   CHECK(srv);
 
-  srv->serve(service, cb);
-
-  if (!service->registerServer(srv->get())) {
-    return nullptr;
-  }
-
+  srv->bitMask() = (1 << subs_.size());
   wait_set_ |= srv->bitMask();
 
-  return static_cast<Server *>(subs_.emplace_back(std::move(srv)).get());
+  return static_cast<Server *>(subs_.emplace_back(srv));
 }
 
-template <typename TransportManager> void NodeT<TransportManager>::spin() {
+inline void Node::spin() {
   while (true) {
-    spinOnce(-1);
+    spinOnce();
   }
 }
 
-template <typename TransportManager>
-void NodeT<TransportManager>::spinOnce(int32_t timeout_ms) {
+inline void Node::spinOnce(int timeout_ms) {
   auto flags = evt_.wait(wait_set_, true, false, timeout_ms);
 
   // new event may set when program reach here, the new topic data will
@@ -147,19 +123,12 @@ void NodeT<TransportManager>::spinOnce(int32_t timeout_ms) {
   // redundant data. in case of this situation, generation should be checked
   // in spinOnce
 
-  // process subscriptions
+  // process subscriptions (and servers)
   for (auto i = 0u; i < subs_.size(); ++i) {
     if (flags & (1 << i)) {
       subs_[i]->spinOnce();
     }
   }
-
-  // TODO: process servers
-  // for (auto i = 0u; i < srvs_.size(); ++i) {
-  //   if (flags & (1 << (i + 16))) {
-  //     srvs_[i]->spinOnce();
-  //   }
-  // }
 }
 
 } // namespace uros

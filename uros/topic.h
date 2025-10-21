@@ -2,96 +2,84 @@
 
 #include "etl/vector.h"
 
-#include "uros_config.h"
+#include "platform.h"
 
 #include "msg.h"
 #include "publisher.h"
 #include "subscription.h"
-#include "transport.h"
 #include "utils.h"
 
 namespace uros {
 
+struct TransportBase;
+
 struct TopicBase {
-  TopicBase(const char *name, int32_t id, type_id_t msg_type, size_t msg_size)
-      : id_(id), name_(name), msg_type_(msg_type), msg_size_(msg_size) {}
+  TopicBase(const char *name, int id, int prio, type_id_t msg_type,
+            size_t msg_size)
+      : id_(id), name_(name), prio_(prio), msg_type_(msg_type),
+        msg_size_(msg_size) {}
 
-  const int32_t &id() const { return id_; }
-
+  // property accessor
+  const auto &id() const { return id_; }
   const char *name() const { return name_; }
-
+  const auto &prio() const { return prio_; }
   const type_id_t &msgType() const { return msg_type_; }
-
   const size_t &msgSize() const { return msg_size_; }
 
-  int32_t generation() const { return generation_; }
+  bool registerTransport(TransportBase *tsp);
 
-  bool registerSubscription(SubscriptionBase *sub) {
-    if (subs_.full()) {
-      return false;
-    }
-    subs_.emplace_back(sub);
-    return true;
-  }
+  virtual void write(TransportBase *tsp, const MsgBase *msg) = 0;
+  virtual bool read(MsgBase *msg, int &seq) = 0;
 
-  bool registerPublisher(PublisherBase *pub) {
-    if (pubs_.full()) {
-      return false;
-    }
-    pubs_.emplace_back(pub);
-    return true;
-  }
-
-  // this should be non-blocking
-  virtual void recv(const int32_t tsp_id, const MsgBase *msg) = 0;
-
-  virtual void setTransport(const int32_t tsp_id, TransportInterface *tsp) = 0;
+  virtual ~TopicBase() = default;
 
 protected:
-  int32_t id_; // global unique identification of a topic
+  int id_; // global unique identification of a topic
   const char *name_;
+  int prio_;
   type_id_t msg_type_;
   size_t msg_size_;
-  int32_t generation_ = -1;
 
-  etl::vector<SubscriptionBase *, UROS_TOPIC_MAX_SUBS> subs_;
-  etl::vector<PublisherBase *, UROS_TOPIC_MAX_PUBS> pubs_;
+  etl::vector<etl::unique_ptr<PublisherBase>, UROS_TOPIC_MAX_PUBS> pubs_;
+  etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
+
+  etl::array<TransportBase *, UROS_MAX_TRANSPORTS> tsps_{};
 };
 
-template <typename TTransportManager, typename TMsg>
-struct TopicT : public TopicBase {
-  using TransportManager = TTransportManager;
+template <typename TMsg> struct TopicT : public TopicBase {
   using Msg = TMsg;
 
-  TopicT(const char *name, int32_t id)
-      : TopicBase(name, id, type_id<TMsg>(), sizeof(TMsg)) {}
+  TopicT(const char *name, int id, int prio)
+      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {
+    msg_.__meta__.id.msg.seq = -1;
+  }
 
-  void write(const TMsg &msg);
+  PublisherT<Msg> *addPublisher();
 
-  bool read(TMsg &msg, int32_t &gen);
+  SubscriptionT<Msg> *
+  addSubscription(const std::function<void(const Msg &)> &cb);
 
-  void update(const TMsg &msg);
+  // write new msg on topic
+  void write(PublisherBase *pub, const TMsg &msg);
+  void write(TransportBase *tsp, const MsgBase *msg) override;
 
-  // this should be non-blocking
-  void recv(const int32_t tsp_id, const MsgBase *msg) override;
+  // read msg on topic
+  bool read(TMsg &msg, int &gen);
+  bool read(MsgBase *msg, int &gen) override;
 
-  void setTransport(const int32_t tsp_id, TransportInterface *tsp) override;
+protected:
+  bool update(const TMsg &msg, int seq);
+  void notify(TransportBase *tsp);
 
 protected:
   TMsg msg_;
-
-  etl::array<TransportInterface *, TransportManager::size> transports_{};
 };
 
 struct TopicManager {
-  static TopicManager &Instance() {
-    static TopicManager inst;
-    return inst;
-  }
 
   template <typename Topic>
-  static Topic *AddTopic(const char *name, int32_t id) {
-    return Instance().addTopic<Topic>(name, id);
+  static Topic *AddTopic(const char *name, int id, int prio) {
+    return Instance().addTopic<Topic>(name, id, prio);
   }
 
   template <typename Topic> static Topic *FindTopic(const char *name) {
@@ -99,7 +87,13 @@ struct TopicManager {
   }
 
 protected:
-  template <typename Topic> Topic *addTopic(const char *name, int32_t id);
+  static TopicManager &Instance() {
+    static TopicManager inst;
+    return inst;
+  }
+
+  template <typename Topic>
+  Topic *addTopic(const char *name, uint8_t id, uint8_t prio);
 
   template <typename Topic> Topic *findTopic(const char *name);
 
@@ -109,7 +103,7 @@ protected:
   TopicManager &operator=(const TopicManager &other) = delete;
 
 protected:
-  etl::array<std::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
+  etl::array<etl::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
 };
 
 } // namespace uros

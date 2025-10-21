@@ -2,8 +2,8 @@
 #include <iostream>
 #include <thread>
 
-#include "urosv2/transport_remote_socket.hpp"
-#include "urosv2/uros.h"
+#include "uros/transport_socket.hpp"
+#include "uros/uros.h"
 
 using namespace std::chrono_literals;
 
@@ -20,16 +20,13 @@ void uros_init() {
   uros::RegisterTopic<SensorData>("/sensor_data", 0);
 
   // config each transport
-  auto transport_local = uros::GetTransportLocal();
-  transport_local->declareTopic("/sensor_data");
-
   // Transport 1: 从 Producer (10001) 接收数据，监听 10002
-  auto transport_in = uros::RegisterTransport<uros::TransportRemoteSocket>();
+  auto transport_in = uros::RegisterTransport<uros::TransportSocket>();
   transport_in->initSocket("127.0.0.1", 10002, "127.0.0.1", 10001);
   transport_in->declareTopic("/sensor_data");
 
   // Transport 2: 转发数据到 Consumer (10004)，监听 10003
-  auto transport_out = uros::RegisterTransport<uros::TransportRemoteSocket>();
+  auto transport_out = uros::RegisterTransport<uros::TransportSocket>();
   transport_out->initSocket("127.0.0.1", 10003, "127.0.0.1", 10004);
   transport_out->declareTopic("/sensor_data"); // 同一个 topic！
 
@@ -46,13 +43,13 @@ int main() {
   uros::Node relay_node;
 
   // 订阅 /sensor_data，仅用于监控（可选）
-  auto relay_sub = relay_node.createSubscription<SensorData>(
-      "/sensor_data", [](const SensorData &msg) {
-        std::cout << "🔄 Relaying: seq=" << msg.sequence
-                  << ", temp=" << msg.temperature
-                  << "°C, humidity=" << msg.humidity << "%" << std::endl;
-      });
-  assert(relay_sub);
+  // auto relay_sub = relay_node.createSubscription<SensorData>(
+  //     "/sensor_data", [](const SensorData &msg) {
+  //       std::cout << "🔄 Relaying: seq=" << msg.sequence
+  //                 << ", temp=" << msg.temperature
+  //                 << "°C, humidity=" << msg.humidity << "%" << std::endl;
+  //     });
+  // assert(relay_sub);
 
   std::cout << "Relay node ready, auto-forwarding /sensor_data..." << std::endl;
   std::cout << "  Transport 1 (in):  127.0.0.1:10002 <- Producer" << std::endl;

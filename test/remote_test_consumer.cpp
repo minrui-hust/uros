@@ -2,8 +2,8 @@
 #include <thread>
 #include <chrono>
 
-#include "urosv2/transport_remote_socket.hpp"
-#include "urosv2/uros.h"
+#include "uros/transport_socket.hpp"
+#include "uros/uros.h"
 
 using namespace std::chrono_literals;
 
@@ -20,11 +20,8 @@ void uros_init() {
   uros::RegisterTopic<SensorData>("/sensor_data", 0);
   
   // config each transport
-  auto transport_local = uros::GetTransportLocal();
-  transport_local->declareTopic("/sensor_data");
-  
   // Transport 1: 从 Relay (10003) 接收数据，监听 10004
-  auto transport = uros::RegisterTransport<uros::TransportRemoteSocket>();
+  auto transport = uros::RegisterTransport<uros::TransportSocket>();
   transport->initSocket("127.0.0.1", 10004, "127.0.0.1", 10003);
   transport->declareTopic("/sensor_data");
   

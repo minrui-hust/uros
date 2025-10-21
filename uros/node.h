@@ -8,57 +8,56 @@ namespace uros {
 
 // topic related pre-declaration
 struct SubscriptionBase;
-template <typename TransportManager, typename TMsg> struct SubscriptionT;
+template <typename TMsg> struct SubscriptionT;
 
 struct PublisherBase;
-template <typename TransportManager, typename TMsg> struct PublisherT;
+template <typename TMsg> struct PublisherT;
 
 struct TopicBase;
-template <typename TransportManager, typename TMsg> struct TopicT;
+template <typename TMsg> struct TopicT;
 
 // service related pre-declaration
 struct ClientBase;
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ClientT;
+template <typename TReq, typename TRsp> struct ClientT;
 
 struct ServerBase;
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ServerT;
+template <typename TReq, typename TRsp> struct ServerT;
 
 struct ServiceBase;
-template <typename TransportManager, typename TReq, typename TRsp>
-struct ServiceT;
+template <typename TReq, typename TRsp> struct ServiceT;
 
-template <typename TransportManager> struct NodeT {
+struct Node {
 
   // topic related api
   template <typename TMsg>
-  SubscriptionT<TransportManager, TMsg> *
+  SubscriptionT<TMsg> *
   createSubscription(const char *topic_name,
                      const std::function<void(const TMsg &)> &cb);
 
   template <typename TMsg>
-  PublisherT<TransportManager, TMsg> *createPublisher(const char *topic_name);
+  PublisherT<TMsg> *createPublisher(const char *topic_name);
 
   // service related api
   template <typename TReq, typename TRsp>
-  ServerT<TransportManager, TReq, TRsp> *
+  ServerT<TReq, TRsp> *
   createServer(const char *service_name,
                const std::function<void(const TReq &, TRsp &)> &cb);
 
   template <typename TReq, typename TRsp>
-  ClientT<TransportManager, TReq, TRsp> *createClient(const char *service_name);
+  ClientT<TReq, TRsp> *createClient(const char *service_name);
 
   void spin();
-  void spinOnce(int32_t timeout_ms = -1);
+
+  void spinOnce(int timeout_ms = -1);
 
 protected:
-  EventGroup evt_;
-  EventBits wait_set_ = 0;
+  // contain both subsciption and server
+  etl::vector<SubscriptionBase *, UROS_NODE_MAX_SUBS> subs_;
+  etl::vector<PublisherBase *, UROS_NODE_MAX_PUBS> pubs_;
+  etl::vector<ClientBase *, UROS_NODE_MAX_CLIS> clis_;
 
-  etl::vector<std::unique_ptr<SubscriptionBase>, UROS_NODE_MAX_SUBS> subs_;
-  etl::vector<std::unique_ptr<PublisherBase>, UROS_NODE_MAX_PUBS> pubs_;
-  etl::vector<std::unique_ptr<ClientBase>, UROS_NODE_MAX_CLIS> clis_;
+  EventGroup evt_;
+  uint32_t wait_set_ = 0;
 };
 
 } // namespace uros
