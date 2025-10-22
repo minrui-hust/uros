@@ -1,6 +1,6 @@
+#include <chrono>
 #include <iostream>
 #include <thread>
-#include <chrono>
 
 #include "uros/transport_socket.hpp"
 #include "uros/uros.h"
@@ -16,21 +16,21 @@ struct SensorData : uros::MsgBase {
 };
 
 void uros_init() {
+  uros::InitGuard g(0);
+
   // 注册 topic
   uros::RegisterTopic<SensorData>("/sensor_data", 0);
-  
+
   // config each transport
   // Transport 1: Producer 监听 10001，发送到 Relay 的 10002
   auto transport_remote = uros::RegisterTransport<uros::TransportSocket>();
   transport_remote->initSocket("127.0.0.1", 10001, "127.0.0.1", 10002);
   transport_remote->declareTopic("/sensor_data");
-  
-  uros::Init();
 }
 
 int main() {
   std::cout << "=== Data Producer (Port 10001) ===" << std::endl;
-  
+
   uros_init();
 
   uros::Node producer_node;
@@ -52,21 +52,21 @@ int main() {
   data.sequence = 0;
   data.temperature = 25.0f;
   data.humidity = 60.0f;
-  
+
   std::cout << "Starting to produce sensor data..." << std::endl;
-  
+
   while (true) {
     // 模拟传感器数据变化
     data.sequence++;
     data.temperature = 25.0f + (data.sequence % 10) * 0.5f;
     data.humidity = 60.0f + (data.sequence % 20) * 0.3f;
-    
-    std::cout << "📤 Producing: seq=" << data.sequence 
-              << ", temp=" << data.temperature 
+
+    std::cout << "📤 Producing: seq=" << data.sequence
+              << ", temp=" << data.temperature
               << "°C, humidity=" << data.humidity << "%" << std::endl;
-    
+
     sensor_pub->publish(data);
-    
+
     std::this_thread::sleep_for(2000ms);
   }
 

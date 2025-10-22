@@ -16,6 +16,8 @@ struct SensorData : uros::MsgBase {
 };
 
 void uros_init() {
+  uros::InitGuard g(0);
+
   // 注册 topic
   uros::RegisterTopic<SensorData>("/sensor_data", 0);
 
@@ -29,8 +31,6 @@ void uros_init() {
   auto transport_out = uros::RegisterTransport<uros::TransportSocket>();
   transport_out->initSocket("127.0.0.1", 10003, "127.0.0.1", 10004);
   transport_out->declareTopic("/sensor_data"); // 同一个 topic！
-
-  uros::Init();
 }
 
 int main() {

@@ -13,7 +13,7 @@ namespace uros {
 struct TransportUdpMulticast : public TransportBase {
 
   void initSocket(const char *mcast_ip = "239.0.0.1",
-                  uint16_t mcast_port = 10000, uint16_t send_port = 0);
+                  uint16_t mcast_port = 12345, uint16_t send_port = 0);
 
   int send(const void *data, size_t len, int prio, int timeout_ms) override;
 

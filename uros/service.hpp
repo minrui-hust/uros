@@ -5,6 +5,7 @@
 #include "client.h"
 #include "server.h"
 #include "service.h"
+#include "system.h"
 #include "transport.h"
 
 namespace uros {
@@ -46,13 +47,12 @@ ClientT<Req, Rsp> *ServiceT<Req, Rsp>::addClient() {
 }
 
 template <typename Req, typename Rsp>
-ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
-    const std::function<void(const Req &, Rsp &)> &cb) {
+ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(const ServiceCallback &cb) {
   if (srvs_.full()) {
     return nullptr;
   }
 
-  auto srv = new ClientT<Req, Rsp>(srvs_.size());
+  auto srv = new ServerT<Req, Rsp>(srvs_.size());
   CHECK(srv);
 
   srv->bind(this, cb);
@@ -63,78 +63,77 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::call(const Req &req, Rsp &rsp, TransportBase *tsp,
+bool ServiceT<Req, Rsp>::call(Client *cli, const Req &req, Rsp &rsp,
                               int timeout_ms) {
-
-  // TODO: reject redundant call(multi path)
-
-  if (srvs_.size() > 0) {
-    return callLocal(req, rsp, tsp, timeout_ms);
+  UROS_PRINT("call service '%d' from client '%d'\n", id_, cli->id());
+  if (onServering()) {
+    return localCall(req, rsp, timeout_ms);
   } else {
-    return callRemote(req, rsp, tsp, timeout_ms);
+    return remoteCall(nullptr, req, rsp, timeout_ms);
   }
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::call(const MsgBase *req, MsgBase *rsp,
-                              TransportBase *tsp, int timeout_ms) {
-  return call(*static_cast<Req *>(req), *static_cast<Rsp *>(rsp), tsp,
-              timeout_ms);
+bool ServiceT<Req, Rsp>::call(TransportBase *tsp, const MsgBase *req,
+                              MsgBase *rsp, int timeout_ms) {
+  if (onServering()) {
+    return localCall(*static_cast<const Req *>(req), *static_cast<Rsp *>(rsp),
+                     timeout_ms);
+  } else {
+    return remoteCall(nullptr, *static_cast<const Req *>(req),
+                      *static_cast<Rsp *>(rsp), timeout_ms);
+  }
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::callLocal(const Req &req, Rsp &rsp, TransportBase *tsp,
-                                   int timeout_ms) {
-  int64_t enter_ms = now_ms();
+bool ServiceT<Req, Rsp>::localCall(const Req &req, Rsp &rsp, int timeout_ms) {
+  UROS_PRINT("localCall on service '%d'\n", id_);
 
-  int timeout_now =
-      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
+  auto enter_ms = now_ms();
 
   // take lock_req_, caused we only allow one access at same time
-  LockGuard<Mutex> lg(lock_req_, timeout_now);
+  LockGuard<Mutex> lg(lock_req_, timeout_now(timeout_ms, enter_ms));
+  if (!lg.locked()) {
+    UROS_PRINT("localCall failed to get req lock\n");
+    return false;
+  }
 
   writeReq(req);
 
   // wait for response
-  timeout_now =
-      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-
-  return waitRsp(rsp, timeout_now);
+  return waitRsp(rsp, timeout_now(timeout_ms, enter_ms));
 }
 
 template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::callRemote(const Req &req, Rsp &rsp,
-                                    TransportBase *from_tsp, int timeout_ms) {
+bool ServiceT<Req, Rsp>::remoteCall(TransportBase *from_tsp, const Req &req,
+                                    Rsp &rsp, int timeout_ms) {
   int64_t enter_ms = now_ms();
 
-  // lock request
-  int timeout_now =
-      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-  LockGuard<Mutex> lg(lock_req_, timeout_now);
+  // take lock_req_, caused we only allow one access at same time
+  LockGuard<Mutex> lg(lock_req_, timeout_now(timeout_ms, enter_ms));
+
+  writeReq(req);
 
   // find route
-  auto to_tsp = findRoute(from_tsp);
-  if (!to_tsp) {
+  auto meta = findRoute(from_tsp);
+  if (!meta) {
     UROS_PRINT("failed to find route for service %d\n", id_);
     return false;
   }
 
-  // send request
-  timeout_now =
-      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-  if (!to_tsp->sendReq(this, req, timeout_ms)) {
+  // send request via transport
+  // req.__meta__.id.req.sys_from = System::Id(); from should set by transport
+  req.__meta__.id.req.sys_to = meta->sys_nxt;
+  if (!meta->tsp->sendReq(this, req, timeout_now(timeout_ms, enter_ms))) {
     return false;
   }
 
   // wait for response
-  timeout_now =
-      etl::min(timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-
-  return waitRsp(rsp, timeout_now);
+  return waitRsp(rsp, timeout_now(timeout_ms, enter_ms));
 }
 
 template <typename Req, typename Rsp>
-TransportBase *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
+TransportMeta *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
   // find the transport to send request
   int best_idx = -1;
   int min_dist = INT_MAX;
@@ -149,67 +148,53 @@ TransportBase *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
     }
   }
 
-  // if found
+  // found
   if (min_dist < INT_MAX) {
-    return tsp_metas_[best_idx]->tsp;
+    return tsp_metas_[best_idx].get();
   }
 
-  // not found
   return nullptr;
 }
 
 template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
-                                               const ServiceBroadcast &sbc) {
-}
-
-template <typename Req, typename Rsp>
-bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
-  LockGuard<CriticalLock> lg;
-  if (req_version_ <= ver) {
-    return false;
+void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv,
+                                               const MsgBase &sbc) {
+  if (updateServiceBroadcast(sbc, sbc.__meta__.id.sbc.seq)) {
+    forwardServiceBroadcast(nullptr, sbc);
+  } else {
+    UROS_PRINT("local updateServiceBroadcast failed: seq(%d)\n",
+               sbc.__meta__.id.sbc.seq);
   }
-  req = req_;
-  ver = req_version_;
-  return true;
 }
 
 template <typename Req, typename Rsp>
-int ServiceT<Req, Rsp>::writeReq(const Req &req) {
-  // TODO: redundant request
-  int gen;
+void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
+                                               const MsgBase *sbc) {
+  if (onServering()) {
+    UROS_PRINT("writeServiceBroadcast called from transport while service in "
+               "on serving, this may caused by multiple server\n");
+    return;
+  }
+
+  if (updateServiceBroadcast(tsp, *sbc, sbc->__meta__.id.sbc.seq)) {
+    forwardServiceBroadcast(tsp, *sbc);
+  } else {
+    UROS_PRINT("remote updateServiceBroadcast failed: seq(%d)\n",
+               sbc->__meta__.id.sbc.seq);
+  }
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeReq(const Req &req) {
+  UROS_PRINT("service '%d' writeReq\n", id_);
   {
     LockGuard<CriticalLock> lg;
     req_ = req;
-    gen = ++req_version_;
+    ++req_version_;
   }
-
-  CHECK(srvs_.size() > 0 && srvs_[0]);
-  srvs_[0]->notify();
-}
-
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp, TransportBase *from_tsp) {
-  auto &meta = tsp_metas_[from_tsp->id()];
-  {
-    LockGuard<CriticalLock> lg;
-    rsp_ = rsp;
-    if (meta) {
-      auto &rsp_dist = rsp_.__meta__.id.rsp.dist;
-      if (rsp_dist < etl::integral_limits<decltype(rsp_dist)>()) {
-        ++rsp_dist;
-      }
-      if (rsp_dist < meta->dist) {
-        meta->dist = rsp_dist;
-      }
-    }
+  for (auto &srv : srvs_) {
+    srv->notify();
   }
-  sem_rsp_.give();
-}
-
-template <typename Req, typename Rsp>
-void ServiceT<Req, Rsp>::writeRsp(const MsgBase *rsp, TransportBase *from_tsp) {
-  writeRsp(*static_cast<Rsp *>(rsp), from_tsp);
 }
 
 template <typename Req, typename Rsp>
@@ -217,9 +202,8 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
   int64_t enter_ms = now_ms();
   bool rsp_ok = false;
   do {
-    int timeout_now = etl::min(
-        timeout_ms, etl::max(timeout_ms - int(now_ms() - enter_ms), 0));
-    if (!sem_rsp_.take(timeout_now)) {
+    if (!sem_rsp_.take(timeout_now(timeout_ms, enter_ms))) {
+      UROS_PRINT("waitRsp timeout\n");
       return false;
     }
 
@@ -229,14 +213,97 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
 
     { // access to rsp_ should be in critical region
       LockGuard<CriticalLock> lg;
-      if (req_.__meta__.id == rsp_.__meta__.id) {
+      if (req_.match(rsp_)) {
         rsp = rsp_;
         rsp_ok = true;
+      } else {
+        UROS_PRINT("waitRsp req&rsp mismatch:\n");
+        UROS_PRINT("req: sys(%d), service(%d), client(%d), seq(%d)\n",
+                   req_.__meta__.sys, req_.__meta__.id.req.service,
+                   req_.__meta__.id.req.client, req_.__meta__.id.req.seq);
+        UROS_PRINT("rsp: sys(%d), service(%d), client(%d), seq(%d)\n",
+                   rsp_.__meta__.sys, rsp_.__meta__.id.rsp.service,
+                   rsp_.__meta__.id.rsp.client, rsp_.__meta__.id.rsp.seq);
       }
     }
   } while (!rsp_ok);
 
   return true;
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
+  LockGuard<CriticalLock> lg;
+  if (int(req_version_ - ver) > 0) {
+    req = req_;
+    ver = req_version_;
+    return true;
+  }
+  return false;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(Server *srv, const Rsp &rsp) {
+  writeRsp(rsp);
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(TransportBase *from_tsp, const MsgBase *rsp) {
+  writeRsp(*static_cast<const Rsp *>(rsp));
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
+  {
+    LockGuard<CriticalLock> lg;
+    rsp_ = rsp;
+  }
+  sem_rsp_.give();
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::updateServiceBroadcast(const MsgBase &sbc, int seq) {
+  LockGuard<CriticalLock> lg;
+  if (int8_t(seq - sbc_.__meta__.id.sbc.seq) > 0) {
+    sbc_ = sbc;
+    sbc_.__meta__.id.sbc.seq = seq;
+    return true;
+  }
+  return false;
+}
+
+template <typename Req, typename Rsp>
+bool ServiceT<Req, Rsp>::updateServiceBroadcast(TransportBase *tsp,
+                                                const MsgBase &sbc, int seq) {
+  auto &meta = tsp_metas_[tsp->id()];
+  CHECK(meta);
+
+  LockGuard<CriticalLock> lg;
+  bool better_dist = sbc.__meta__.id.sbc.dist < meta->dist;
+  int8_t seq_diff = seq - sbc_.__meta__.id.sbc.seq;
+
+  if (seq_diff > 0 || (seq_diff == 0 && better_dist)) {
+    sbc_ = sbc;
+    sbc_.__meta__.id.sbc.seq = seq;
+    if (better_dist) {
+      meta->dist = sbc.__meta__.id.sbc.dist;
+      meta->sys_nxt = sbc.__meta__.id.sbc.sys_from;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+template <typename Req, typename Rsp>
+void ServiceT<Req, Rsp>::forwardServiceBroadcast(TransportBase *tsp_from,
+                                                 const MsgBase &sbc) {
+  sbc.__meta__.id.sbc.sys_from = System::Id();
+  for (auto &meta : tsp_metas_) {
+    if (meta && meta->tsp != tsp_from) {
+      meta->tsp->sendServiceAnnounce(this, sbc, -1);
+    }
+  }
 }
 
 template <typename Service>

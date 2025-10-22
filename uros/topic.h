@@ -48,6 +48,8 @@ protected:
 
 template <typename TMsg> struct TopicT : public TopicBase {
   using Msg = TMsg;
+  using Publisher = PublisherT<TMsg>;
+  using Subscription = SubscriptionT<TMsg>;
 
   TopicT(const char *name, int id, int prio)
       : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {
@@ -60,7 +62,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
   addSubscription(const std::function<void(const Msg &)> &cb);
 
   // write new msg on topic
-  void write(PublisherBase *pub, const TMsg &msg);
+  void write(Publisher *pub, const TMsg &msg);
   void write(TransportBase *tsp, const MsgBase *msg) override;
 
   // read msg on topic

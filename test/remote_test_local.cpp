@@ -15,6 +15,8 @@ struct MessageResponse : uros::MsgBase {
 };
 
 void uros_init() {
+  uros::InitGuard g(0);
+
   uros::RegisterTopic<MessageHello>("/hello", 0);
   uros::RegisterTopic<MessageResponse>("/hello_response", 1);
 
@@ -23,8 +25,6 @@ void uros_init() {
   transport_udp->initSocket("127.0.0.1", 10001, "127.0.0.1", 10002);
   transport_udp->declareTopic("/hello");
   transport_udp->declareTopic("/hello_response");
-
-  uros::Init();
 }
 
 int main() {

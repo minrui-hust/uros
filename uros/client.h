@@ -9,6 +9,8 @@ template <typename TReq, typename TRsp> struct ServiceT;
 struct ClientBase {
   ClientBase(int id) : id_(id) {}
 
+  auto &id() const { return id_; }
+
   virtual ~ClientBase() = default;
 
 protected:
@@ -26,7 +28,7 @@ template <typename TReq, typename TRsp> struct ClientT : ClientBase {
 
 protected:
   Service *service_;
-  int8_t seq_;
+  int seq_ = 0;
 };
 
 } // namespace uros
