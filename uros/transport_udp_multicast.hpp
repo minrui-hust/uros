@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdlib>
+
 #include "transport_udp_multicast.h"
 
 namespace uros {
@@ -7,8 +9,29 @@ namespace uros {
 inline void TransportUdpMulticast::initSocket(const char *mcast_ip,
                                               uint16_t mcast_port,
                                               uint16_t send_port) {
+  char final_mcast_ip[16];
+  
+  // 从环境变量读取 DOMAIN_ID
+  const char *domain_id_env = std::getenv("UROS_DOMAIN_ID");
+  if (domain_id_env) {
+    int domain_id = std::atoi(domain_id_env);
+    if (domain_id >= 0 && domain_id <= 255) {
+      snprintf(final_mcast_ip, sizeof(final_mcast_ip), "239.0.0.%d", domain_id);
+      UROS_PRINT("[TransportRemoteUdp] Using UROS_DOMAIN_ID=%d: %s:%d\n",
+                 domain_id, final_mcast_ip, mcast_port);
+    } else {
+      UROS_PRINT("[TransportRemoteUdp] Invalid UROS_DOMAIN_ID=%d (must be 0-255), using default %s:%d\n",
+                 domain_id, mcast_ip, mcast_port);
+      strncpy(final_mcast_ip, mcast_ip, sizeof(final_mcast_ip));
+    }
+  } else {
+    strncpy(final_mcast_ip, mcast_ip, sizeof(final_mcast_ip));
+    UROS_PRINT("[TransportRemoteUdp] No UROS_DOMAIN_ID set, using %s:%d\n",
+               final_mcast_ip, mcast_port);
+  }
+  
   UROS_PRINT("[TransportRemoteUdp] Initializing: %s:%d (send_port=%d)\n",
-             mcast_ip, mcast_port, send_port);
+             final_mcast_ip, mcast_port, send_port);
 
   // ========== 1. 创建并配置接收 socket ==========
   recvfd_ = socket(AF_INET, SOCK_DGRAM, 0);
@@ -36,11 +59,11 @@ inline void TransportUdpMulticast::initSocket(const char *mcast_ip,
 
   // 加入组播组
   struct ip_mreq mreq;
-  mreq.imr_multiaddr.s_addr = inet_addr(mcast_ip);
+  mreq.imr_multiaddr.s_addr = inet_addr(final_mcast_ip);
   mreq.imr_interface.s_addr = INADDR_ANY;
   res = setsockopt(recvfd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
   CHECK(res >= 0)
-  UROS_PRINT("[TransportRemoteUdp] Joined multicast group %s\n", mcast_ip);
+  UROS_PRINT("[TransportRemoteUdp] Joined multicast group %s\n", final_mcast_ip);
 
   // ========== 2. 创建并配置发送 socket ==========
   sendfd_ = socket(AF_INET, SOCK_DGRAM, 0);
@@ -71,7 +94,7 @@ inline void TransportUdpMulticast::initSocket(const char *mcast_ip,
   // ========== 3. 配置组播目标地址 ==========
   memset(&multicast_addr_, 0, sizeof(multicast_addr_));
   multicast_addr_.sin_family = AF_INET;
-  multicast_addr_.sin_addr.s_addr = inet_addr(mcast_ip);
+  multicast_addr_.sin_addr.s_addr = inet_addr(final_mcast_ip);
   multicast_addr_.sin_port = htons(mcast_port);
 
   UROS_PRINT("[TransportRemoteUdp] Initialization complete (my_port=%d)\n",

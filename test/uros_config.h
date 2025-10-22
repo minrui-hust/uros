@@ -28,4 +28,4 @@ static_assert(UROS_NODE_MAX_SUBS <= 24);
 #define UROS_TRANSPORT_WORKER_PRIORITY 3 // almost lowest
 #define UROS_TRANSPORT_REQ_QUEUE_SIZE (2 * UROS_MSG_MAX_SIZE)
 
-// #define UROS_VERBOSE
+#define UROS_VERBOSE
