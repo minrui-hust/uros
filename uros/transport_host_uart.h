@@ -1,13 +1,14 @@
 #pragma once
 #include <unistd.h>
 
+#include "packer.h"
 #include "transport.h"
 
 namespace uros {
 
 struct TransportHostUart : public TransportBase {
 
-  void initHostUart();
+  void initHostUart(const char *drv_name);
 
   int send(const void *data, size_t len, int prio, int timeout_ms) override;
 
@@ -20,6 +21,11 @@ struct TransportHostUart : public TransportBase {
 
 private:
   int fd_ = 0;
+  static const uint16_t MAX_SIZE = 512;
+  uint8_t recv_buf_[MAX_SIZE] = {0};
+  uint8_t send_buf_[MAX_SIZE] = {0};
+
+  PacketParser packer_;
 };
 
 } // namespace uros
