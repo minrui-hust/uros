@@ -230,12 +230,124 @@ public:
   }
 
   // 批量处理数据
-  int32_t processBuffer(const uint8_t *recv_buf_, uint32_t received,
+  int32_t processBuffer(const uint8_t *recv_buf, uint32_t received,
                         uint8_t *data, uint32_t length, uint32_t *data_len) {
     uint16_t packets_found = 0;
 
     for (uint16_t i = 0; i < received; i++) {
-      if (processByte(recv_buf_[i])) {
+      bool is_unpack_success = 0;
+
+      switch (state_) {
+      case STATE_PREAMBLE_1:
+        if (recv_buf[i] == expected_preamble_1) {
+          state_ = STATE_PREAMBLE_2;
+          buffer_index = 0;
+          // 存储第一个前导字节到header
+          header.preamble_1 = recv_buf[i];
+        }
+        break;
+
+      case STATE_PREAMBLE_2:
+        if (recv_buf[i] == expected_preamble_2) {
+          state_ = STATE_SEQ_ID;
+          header.preamble_2 = recv_buf[i];
+        } else {
+          reset(); // 不是预期的前导字节，重置
+        }
+        break;
+
+      case STATE_SEQ_ID:
+        // current_seq_id = byte;
+        header.seq_id = recv_buf[i];
+        state_ = STATE_CRC8;
+        break;
+
+      case STATE_CRC8:
+        // received_crc8 = byte;
+        header.crc8 = recv_buf[i];
+        state_ = STATE_LENGTH_LOW;
+        break;
+
+      case STATE_LENGTH_LOW:
+        header.len = recv_buf[i]; // 先存储低字节
+        state_ = STATE_LENGTH_HIGH;
+        break;
+
+      case STATE_LENGTH_HIGH:
+        header.len |= (recv_buf[i] << 8);
+
+        // 验证长度是否合理
+        if (header.len > MAX_PACKET_SIZE) {
+          reset(); // 长度无效，重置
+          break;
+        }
+
+        state_ = STATE_RESERVE_LOW;
+        break;
+
+      case STATE_RESERVE_LOW:
+        header.reserve = recv_buf[i]; // 先存储低字节
+        state_ = STATE_RESERVE_HIGH;
+        break;
+
+      case STATE_RESERVE_HIGH:
+        header.reserve |= (recv_buf[i] << 8); // 更新完整的保留字段
+
+        if (header.len == 0) {
+          // 没有数据载荷，直接进行CRC校验
+          calculated_crc8 = calculateCRC8(nullptr, 0);
+          if (calculated_crc8 == header.crc8) {
+            // CRC校验成功
+            if (packet_callback_) {
+              packet_callback_(&header, nullptr, 0);
+            }
+            reset();
+            is_unpack_success = 1;
+          } else {
+            reset(); // CRC校验失败
+          }
+        } else {
+          state_ = STATE_PAYLOAD;
+          current_length = 0;
+        }
+        break;
+
+      case STATE_PAYLOAD:
+        // 存储数据载荷
+        if (buffer_index < BUFFER_SIZE) {
+          data_buffer[buffer_index++] = recv_buf[i];
+          current_length++;
+
+          // 检查是否接收完所有数据
+          if (current_length >= header.len) {
+            // 计算数据段的CRC8
+            calculated_crc8 = calculateCRC8(data_buffer, header.len);
+
+            if (calculated_crc8 == header.crc8) {
+              // CRC校验成功
+              // if (packet_callback_) {
+              //   packet_callback_(&header, data_buffer, header.len);
+              // }
+              // reset();
+              is_unpack_success = 1;
+            } else {
+              // CRC校验失败
+              crc_err++;
+              reset();
+            }
+          }
+        } else {
+          reset(); // 缓冲区溢出，重置
+        }
+        break;
+
+      default:
+        reset();
+        break;
+      }
+
+      if (is_unpack_success) {
+        is_unpack_success = 0;
         packets_found++;
 
         if (first_recv_seq_id) {
@@ -275,6 +387,53 @@ public:
 
     return packets_found; // 成功解析，返回一包数据长度
   }
+
+  // // 批量处理数据
+  // int32_t processBuffer(const uint8_t *recv_buf, uint32_t received,
+  //                       uint8_t *data, uint32_t length, uint32_t *data_len) {
+  //   uint16_t packets_found = 0;
+
+  //   for (uint16_t i = 0; i < received; i++) {
+  //     if (processByte(recv_buf[i])) {
+  //       packets_found++;
+
+  //       if (first_recv_seq_id) {
+  //         last_seq_id = header.seq_id;
+  //         first_recv_seq_id = 0;
+  //         seq_id_right++;
+
+  //       } else {
+  //         cur_seq_id = header.seq_id;
+  //         if (((cur_seq_id == 0) && (last_seq_id == 255)) ||
+  //             ((cur_seq_id - last_seq_id) == 1)) {
+  //           seq_id_right++;
+  //         } else {
+  //           seq_id_err++;
+  //           // MyPrintf("seq_id err !!!cur:% d, last:%d\n", cur_seq_id,
+  //           //          last_seq_id);
+  //         }
+  //         last_seq_id = cur_seq_id;
+  //       }
+
+  //       if (length < header.len) {
+  //         return -1;
+  //       }
+
+  //       if (packets_found == 1) {
+  //         memcpy(data, data_buffer, header.len);
+  //         *data_len = header.len;
+  //       } else {
+  //         repeat_unpacke++;
+  //         if (write_buf(data_buffer, header.len) == -1) {
+  //           buf_overrun++;
+  //         }
+  //       }
+  //       reset();
+  //     }
+  //   }
+
+  //   return packets_found; // 成功解析，返回一包数据长度
+  // }
 
   Header buildPacket2(const uint8_t *data, uint16_t data_length) {
     Header packer_header;
