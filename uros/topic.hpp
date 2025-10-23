@@ -58,23 +58,21 @@ TopicT<Msg>::addSubscription(const std::function<void(const Msg &)> &cb) {
 
 template <typename TMsg>
 void TopicT<TMsg>::write(Publisher *pub, const TMsg &msg) {
-  if (update(msg, msg.__meta__.id.msg.seq)) {
-    notify(nullptr);
-  }
+  update(msg);
+  notify(nullptr);
 }
 
 template <typename TMsg>
 void TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
-  if (update(*static_cast<const TMsg *>(msg), msg->__meta__.id.msg.seq)) {
-    notify(tsp);
-  }
+  update(*static_cast<const TMsg *>(msg));
+  notify(tsp);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &seq) {
+template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &ver) {
   LockGuard<CriticalLock> lg;
-  if (int16_t(msg_.__meta__.id.msg.seq - seq) > 0) {
+  if (int(version_ - ver) > 0) {
     msg = msg_;
-    seq = msg_.__meta__.id.msg.seq;
+    ver = version_;
     return true;
   }
   return false;
@@ -84,14 +82,11 @@ template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int &seq) {
   return read(*static_cast<TMsg *>(msg), seq);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::update(const TMsg &msg, int seq) {
+template <typename TMsg> bool TopicT<TMsg>::update(const TMsg &msg) {
   LockGuard<CriticalLock> lg;
-  if (int16_t(seq - msg_.__meta__.id.msg.seq) > 0) {
-    msg_ = msg;
-    msg_.__meta__.id.msg.seq = seq;
-    return true;
-  }
-  return false;
+  msg_ = msg;
+  ++version_;
+  return true;
 }
 
 template <typename TMsg> void TopicT<TMsg>::notify(TransportBase *from_tsp) {

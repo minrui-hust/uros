@@ -39,6 +39,7 @@ protected:
   int prio_;
   type_id_t msg_type_;
   size_t msg_size_;
+  int version_ = -1;
 
   etl::vector<etl::unique_ptr<PublisherBase>, UROS_TOPIC_MAX_PUBS> pubs_;
   etl::vector<etl::unique_ptr<SubscriptionBase>, UROS_TOPIC_MAX_SUBS> subs_;
@@ -52,9 +53,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
   using Subscription = SubscriptionT<TMsg>;
 
   TopicT(const char *name, int id, int prio)
-      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {
-    msg_.__meta__.id.msg.seq = -1;
-  }
+      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
 
   PublisherT<Msg> *addPublisher();
 
@@ -70,7 +69,7 @@ template <typename TMsg> struct TopicT : public TopicBase {
   bool read(MsgBase *msg, int &gen) override;
 
 protected:
-  bool update(const TMsg &msg, int seq);
+  bool update(const TMsg &msg);
   void notify(TransportBase *tsp);
 
 protected:

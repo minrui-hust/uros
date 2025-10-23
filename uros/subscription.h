@@ -31,7 +31,7 @@ protected:
   int id_; // index in topic
   EventGroup *evt_ = nullptr;
   EventBits bit_mask_ = 0;
-  int seq_ = -1;
+  int version_ = -1;
 };
 
 template <typename TMsg> struct SubscriptionT : public SubscriptionBase {
