@@ -11,10 +11,12 @@
 
 #include "transport_host_uart.h"
 
+uint32_t total_send_len = 0;
 uint32_t total_recv_len = 0;
 uint32_t unpack_success = 0;
 uint32_t repeat_unpacke = 0;
 uint32_t ret = 0;
+uint32_t ret_buf = 0;
 uint32_t buf_overrun = 0;
 
 uint8_t cur_seq_id = 0;
@@ -67,10 +69,15 @@ inline int TransportHostUart::send(const void *data, size_t len, int prio,
                                    int timeout_ms) {
   UROS_PRINT("transport_remote_socket.send: %zu\n", len);
   //封包
-  uint32_t packer_size =
-      packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
-  return write(fd_, send_buf_, packer_size);
+  // uint32_t packer_size =
+  //     packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
+  // return write(fd_, send_buf_, packer_size);
+
+  Header send_header = packer_.buildPacket2((const uint8_t *)data, len);
+  write(fd_, &send_header, sizeof(Header));
   tcdrain(fd_);
+  total_send_len += (sizeof(Header) + len);
+  return write(fd_, data, len);
 }
 
 inline int TransportHostUart::recv(void *data, size_t len, int *prio,
@@ -78,93 +85,124 @@ inline int TransportHostUart::recv(void *data, size_t len, int *prio,
   //直接读packer的buf
   int32_t read_buf_len = packer_.read_buf((uint8_t *)data, len);
   if (read_buf_len > 0) {
-    uint8_t *byte_data = static_cast<uint8_t *>(data);
-    std::cout << std::hex << std::uppercase << std::setfill('0');
-    for (int32_t i = 0; i < read_buf_len; ++i) {
-      std::cout << std::setw(2) << static_cast<int>(byte_data[i]);
-      if (i < read_buf_len - 1) {
-        std::cout << " ";
-      }
-    }
-    std::cout << std::dec << std::nouppercase << std::endl;
-
     ret++;
     return read_buf_len;
   }
 
-  bool get_packer = 0;
+  int32_t get_packer = 0;
   uint32_t ret_len = 0;
   while (!get_packer) {
-
     int received = read(fd_, recv_buf_, len);
     total_recv_len += received;
 
     if (received < 0) {
-      std::cout << "read error': " << std::endl;
+      std::cout << "read error " << std::endl;
     } else {
       //解包
-      for (uint16_t i = 0; i < received; i++) {
-        if (packer_.processByte(recv_buf_[i])) {
-          unpack_success++;
-          // std::cout << "unpack success: " << unpack_success << std::endl;
-
-          // std::cout << "recv seq id: "
-          //           << static_cast<int>(packer_.current_seq_id) << std::endl;
-
-          if (first_recv_seq_id) {
-            last_seq_id = packer_.current_seq_id;
-            first_recv_seq_id = 0;
-            seq_id_girht++;
-          } else {
-            cur_seq_id = packer_.current_seq_id;
-            if (((cur_seq_id == 0) && (last_seq_id == 255)) ||
-                ((cur_seq_id - last_seq_id) == 1)) {
-              seq_id_girht++;
-              std::cout << "right:" << seq_id_girht << std::endl;
-            } else {
-              seq_id_err++;
-              std::cout << "seq_id err!!! :  " << seq_id_err << std::endl;
-              std::cout << "cur_seq_id: " << cur_seq_id
-                        << "last_seq_id: " << last_seq_id << std::endl;
-            }
-            last_seq_id = cur_seq_id;
-          }
-
-          if (get_packer == 0) {
-            memcpy(data, packer_.data_buffer, packer_.expected_length);
-            ret_len = packer_.expected_length;
-            get_packer = 1;
-          } else {
-            repeat_unpacke++;
-            std::cout << "repeat_unpacke:" << repeat_unpacke << std::endl;
-
-            if (packer_.write_buf(packer_.data_buffer,
-                                  packer_.expected_length) == -1) {
-              buf_overrun++;
-            }
-          }
-
-          packer_.reset();
-        }
-      }
-
-      if (!get_packer) {
-        std::cout << "unpack false!!!!!!!!!" << std::endl;
-      } else {
-        //   //解包成功
-        //   std::cout << std::hex << std::setfill('0');
-        //   for (size_t i = 0; i < (received - 4); ++i) {
-        //     std::cout << "0x" << std::setw(2)
-        //               << static_cast<int>(recv_buf_[i + 2]) << " ";
-        //   }
-        //   std::cout << std::dec << std::endl; // 恢复十进制
-      }
+      get_packer += packer_.processBuffer(recv_buf_, received, (uint8_t *)data,
+                                          len, &ret_len);
+      unpack_success += get_packer;
     }
   }
 
-  ret++;
   UROS_PRINT("transport_remote_socket.recv: %d\n", received);
+  ret++;
   return ret_len;
 }
+
+// inline int TransportHostUart::recv(void *data, size_t len, int *prio,
+//                                    int timeout_ms) {
+//   //直接读packer的buf
+//   int32_t read_buf_len = packer_.read_buf((uint8_t *)data, len);
+//   if (read_buf_len > 0) {
+//     uint8_t *byte_data = static_cast<uint8_t *>(data);
+//     std::cout << std::hex << std::uppercase << std::setfill('0');
+//     for (int32_t i = 0; i < read_buf_len; ++i) {
+//       std::cout << std::setw(2) << static_cast<int>(byte_data[i]);
+//       if (i < read_buf_len - 1) {
+//         std::cout << " ";
+//       }
+//     }
+//     std::cout << std::dec << std::nouppercase << std::endl;
+
+//     ret_buf++;
+//     return read_buf_len;
+//   }
+
+//   bool get_packer = 0;
+//   uint32_t ret_len = 0;
+//   while (!get_packer) {
+
+//     int received = read(fd_, recv_buf_, len);
+//     total_recv_len += received;
+
+//     if (received < 0) {
+//       std::cout << "read error " << std::endl;
+//     } else {
+//       //解包
+//       for (uint16_t i = 0; i < received; i++) {
+//         if (packer_.processByte(recv_buf_[i])) {
+//           unpack_success++;
+//           // std::cout << "unpack success: " << unpack_success << std::endl;
+
+//           // std::cout << "recv seq id: "
+//           //           << static_cast<int>(packer_.current_seq_id) <<
+//           //           std::endl;
+
+//           if (first_recv_seq_id) {
+//             last_seq_id = packer_.header.seq_id;
+//             first_recv_seq_id = 0;
+//             seq_id_girht++;
+//           } else {
+//             cur_seq_id = packer_.header.seq_id;
+//             if (((cur_seq_id == 0) && (last_seq_id == 255)) ||
+//                 ((cur_seq_id - last_seq_id) == 1)) {
+//               seq_id_girht++;
+//               std::cout << "right:" << seq_id_girht << std::endl;
+//             } else {
+//               seq_id_err++;
+//               std::cout << "seq_id err!!! :  " << seq_id_err << std::endl;
+//               std::cout << "cur_seq_id: " << cur_seq_id
+//                         << "last_seq_id: " << last_seq_id << std::endl;
+//             }
+//             last_seq_id = cur_seq_id;
+//           }
+
+//           if (get_packer == 0) {
+//             memcpy(data, packer_.data_buffer, packer_.header.len);
+//             ret_len = packer_.header.len;
+//             get_packer = 1;
+//           } else {
+//             repeat_unpacke++;
+//             std::cout << "repeat_unpacke:" << repeat_unpacke << std::endl;
+
+//             if (packer_.write_buf(packer_.data_buffer, packer_.header.len) ==
+//                 -1) {
+//               buf_overrun++;
+//             }
+//           }
+
+//           packer_.reset();
+//         }
+//       }
+
+//       if (!get_packer) {
+//         // std::cout << "unpack false!!!!!!!!!" << std::endl;
+//       } else {
+//         //   //解包成功
+//         //   std::cout << std::hex << std::setfill('0');
+//         //   for (size_t i = 0; i < (received - 4); ++i) {
+//         //     std::cout << "0x" << std::setw(2)
+//         //               << static_cast<int>(recv_buf_[i + 2]) << " ";
+//         //   }
+//         //   std::cout << std::dec << std::endl; // 恢复十进制
+//       }
+//     }
+//   }
+
+//   ret++;
+//   UROS_PRINT("transport_remote_socket.recv: %d\n", received);
+//   return ret_len;
+// }
 
 } // namespace uros
