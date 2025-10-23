@@ -308,31 +308,20 @@ void ServiceT<Req, Rsp>::forwardServiceBroadcast(TransportBase *tsp_from,
 
 template <typename Service>
 Service *ServiceManager::addService(const char *name, int id) {
-  if ((size_t)id >= services_.size()) {
+  if (services_.full()) {
     return nullptr;
   }
 
-  auto &service = services_[id];
-  if (service) {
-    if (service->id() == id && strcmp(service->name(), name) == 0) {
-      UROS_PRINT("service '%s' already added with same type\n", name);
-      return static_cast<Service *>(service.get());
-    } else {
-      UROS_PRINT("service '%s' already added with different type\n", name);
-      return nullptr;
-    }
-  }
-
-  service = etl::unique_ptr(new Service(name, id));
+  auto service = new Service(name, id);
   CHECK(service);
+  services_.emplace_back(service);
 
-  return static_cast<Service *>(service.get());
+  return service;
 }
 
 template <typename Service>
 Service *ServiceManager::findService(const char *name) {
-  for (auto i = 0u; i < services_.size(); ++i) {
-    auto &srv = services_[i];
+  for (auto &srv : services_) {
     if (srv.get() != nullptr && strcmp(srv->name(), name) == 0) {
       if constexpr (std::is_same_v<Service, ServiceBase>) {
         return srv.get();

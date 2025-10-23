@@ -105,7 +105,7 @@ protected:
   TopicManager &operator=(const TopicManager &other) = delete;
 
 protected:
-  etl::array<etl::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_{};
+  etl::vector<etl::unique_ptr<TopicBase>, UROS_MAX_TOPICS> topics_;
 };
 
 } // namespace uros

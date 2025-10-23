@@ -14,19 +14,19 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
   }
 
   auto topic_id = topic->id();
-  if ((size_t)topic_id >= topic_metas_.size()) {
-    return false;
-  }
+  CHECK(topic_id < 32); // limited by task notify
 
-  auto &meta = topic_metas_[topic_id];
-  if (meta) {
+  if (topic_metas_.contains(topic_id)) {
     UROS_PRINT("topic '%s' already declared on transport %d \n", topic_name,
                id_);
     return false;
   }
 
-  meta.reset(new TopicMeta);
-  meta->topic = topic;
+  auto [iter, ret] = topic_metas_.insert(
+      {topic_id, etl::unique_ptr<TopicMeta>(new TopicMeta)});
+  CHECK(ret);
+
+  iter->second->topic = topic;
   topic->registerTransport(this);
 
   topic_bit_mask_ |= 1 << topic_id;
@@ -37,27 +37,23 @@ inline bool TransportBase::declareTopic(const char *topic_name) {
 }
 
 inline bool TransportBase::declareService(const char *service_name) {
-  // find service by name
   auto service = ServiceManager::FindService<ServiceBase>(service_name);
   if (!service) {
     return false;
   }
 
-  // check if service id exceed limit
   auto service_id = service->id();
-  if ((size_t)service_id >= service_metas_.size()) {
-    return false;
-  }
-
-  auto &meta = service_metas_[service_id];
-  if (meta) {
+  if (service_metas_.contains(service_id)) {
     UROS_PRINT("service '%s' already declared on transport %d \n", service_name,
                id_);
     return false;
   }
 
-  meta.reset(new ServiceMeta);
-  meta->service = service;
+  auto [iter, ret] = service_metas_.insert(
+      {service_id, etl::unique_ptr<ServiceMeta>(new ServiceMeta)});
+  CHECK(ret);
+
+  iter->second->service = service;
   service->registerTransport(this);
 
   UROS_PRINT("add service '%s' to transport %d succeed\n", service_name, id_);
@@ -106,9 +102,8 @@ inline void TransportBase::sendWork() {
     ThreadNotifyWait(0, topic_bit_mask_, &flags, -1); // blocking wait
     UROS_PRINT("TransportBase::sendWork: wait done, 0x%x\n", flags);
 
-    for (auto i = 0u; i < topic_metas_.size(); ++i) {
-      if (flags & (1 << i)) {
-        auto &meta = topic_metas_[i];
+    for (auto &[tid, meta] : topic_metas_) {
+      if (flags & (1 << tid)) {
         if (meta->topic->read(&send_buf_.msg, meta->seq)) {
           send(&send_buf_.msg, meta->topic->msgSize(), meta->topic->prio(), -1);
         }
@@ -188,30 +183,28 @@ inline void TransportBase::serviceWork() {
 
 inline void TransportBase::recvNormal(const MsgBase *msg, size_t len) {
   auto topic_id = msg->__meta__.id.msg.topic;
-  if (topic_id >= topic_metas_.size() || !topic_metas_[topic_id] ||
-      topic_metas_[topic_id]->topic->msgSize() != len) {
+  auto iter = topic_metas_.find(topic_id);
+  if (iter == topic_metas_.end() || iter->second->topic->msgSize() != len) {
     UROS_PRINT("Invalid msg\n");
     return;
   }
 
   UROS_PRINT("TransportBase::recvNormal, topic_id: %d\n", topic_id);
 
-  auto &meta = topic_metas_[topic_id];
-
-  meta->topic->write(this, msg);
+  iter->second->topic->write(this, msg);
 }
 
 inline void TransportBase::recvRequest(const MsgBase *msg, size_t len) {
   auto service_id = msg->__meta__.id.req.service;
-  if (service_id >= service_metas_.size() || !service_metas_[service_id] ||
-      service_metas_[service_id]->service->reqSize() != len) {
+  auto iter = service_metas_.find(service_id);
+  if (iter == service_metas_.end() || iter->second->service->reqSize() != len) {
     UROS_PRINT("Invalid req\n");
     return;
   }
 
   UROS_PRINT("TransportBase::recvRequest, service_id: %d\n", service_id);
 
-  auto &meta = service_metas_[service_id];
+  auto &meta = iter->second;
 
   if (!req_queue_.send(msg, meta->service->reqSize(), 0)) {
     UROS_PRINT("transport request queue overflow, drop request\n");
@@ -220,15 +213,15 @@ inline void TransportBase::recvRequest(const MsgBase *msg, size_t len) {
 
 inline void TransportBase::recvResponse(const MsgBase *msg, size_t len) {
   auto service_id = msg->__meta__.id.rsp.service;
-  if (service_id >= service_metas_.size() || !service_metas_[service_id] ||
-      service_metas_[service_id]->service->rspSize() != len) {
+  auto iter = service_metas_.find(service_id);
+  if (iter == service_metas_.end() || iter->second->service->rspSize() != len) {
     UROS_PRINT("Invalid rsp\n");
     return;
   }
 
   UROS_PRINT("TransportBase::recvResponse, service_id: %d\n", service_id);
 
-  auto &meta = service_metas_[service_id];
+  auto &meta = iter->second;
 
   meta->service->writeRsp(this, msg);
 }
@@ -236,8 +229,8 @@ inline void TransportBase::recvResponse(const MsgBase *msg, size_t len) {
 inline void TransportBase::recvServiceBroadcast(const MsgBase *msg,
                                                 size_t len) {
   auto service_id = msg->__meta__.id.sbc.service;
-  if (service_id >= service_metas_.size() || !service_metas_[service_id] ||
-      sizeof(MsgBase) != len) {
+  auto iter = service_metas_.find(service_id);
+  if (iter == service_metas_.end() || sizeof(MsgBase) != len) {
     UROS_PRINT("Invalid sbc\n");
     return;
   }
@@ -245,7 +238,7 @@ inline void TransportBase::recvServiceBroadcast(const MsgBase *msg,
   UROS_PRINT("TransportBase::recvServiceBroadcast, service_id: %d\n",
              service_id);
 
-  auto &meta = service_metas_[service_id];
+  auto &meta = iter->second;
 
   // increate the sbc dist
   if (msg->__meta__.id.sbc.dist < UROS_SBC_DIST_MAX) {

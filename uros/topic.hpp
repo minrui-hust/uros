@@ -110,30 +110,20 @@ template <typename TMsg> void TopicT<TMsg>::notify(TransportBase *from_tsp) {
 
 template <typename Topic>
 Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
-  if ((size_t)id >= topics_.size()) {
+  if (topics_.full()) {
     return nullptr;
   }
 
-  auto &topic = topics_[id];
-  if (topic) {
-    if (topic->id() == id && strcmp(topic->name(), name) == 0) {
-      UROS_PRINT("topic '%s' already added with same type\n", name);
-      return static_cast<Topic *>(topic.get());
-    } else {
-      UROS_PRINT("topic '%s' already added with different type\n", name);
-      return nullptr;
-    }
-  }
-
-  topic = etl::unique_ptr(new Topic(name, id, prio));
+  // create a new topic
+  auto topic = new Topic(name, id, prio);
   CHECK(topic);
+  topics_.emplace_back(topic);
 
-  return static_cast<Topic *>(topic.get());
+  return topic;
 }
 
 template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
-  for (auto i = 0u; i < topics_.size(); ++i) {
-    auto &tp = topics_[i];
+  for (auto &tp : topics_) {
     if (tp.get() != nullptr && strcmp(tp->name(), name) == 0) {
       if constexpr (std::is_same_v<Topic, TopicBase>) {
         return tp.get();
@@ -142,7 +132,7 @@ template <typename Topic> Topic *TopicManager::findTopic(const char *name) {
           return static_cast<Topic *>(tp.get());
         } else {
           UROS_PRINT("topic found but msg type mismatch\n");
-          return nullptr; // topic exist but type mismatch
+          return nullptr;
         }
       }
     }

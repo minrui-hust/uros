@@ -147,7 +147,7 @@ protected:
   ServiceManager &operator=(const ServiceManager &other) = delete;
 
 protected:
-  etl::array<etl::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_{};
+  etl::vector<etl::unique_ptr<ServiceBase>, UROS_MAX_SERVICES> services_;
 };
 
 } // namespace uros
