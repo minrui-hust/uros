@@ -74,10 +74,11 @@ inline int TransportHostUart::send(const void *data, size_t len, int prio,
   // return write(fd_, send_buf_, packer_size);
 
   Header send_header = packer_.buildPacket2((const uint8_t *)data, len);
-  write(fd_, &send_header, sizeof(Header));
+  uint32_t send_len = write(fd_, &send_header, sizeof(Header));
   tcdrain(fd_);
-  total_send_len += (sizeof(Header) + len);
-  return write(fd_, data, len);
+  send_len += write(fd_, data, len);
+  total_send_len += send_len;
+  return send_len;
 }
 
 inline int TransportHostUart::recv(void *data, size_t len, int *prio,
