@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "etl/unordered_map.h"
 #include "etl/vector.h"
 
 #include "msg.h"
@@ -69,8 +70,11 @@ protected:
   int32_t id_ = -1;
   uint32_t topic_bit_mask_ = 0;
 
-  etl::array<etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_{};
-  etl::array<etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES> service_metas_{};
+  etl::unordered_map<int, etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS>
+      topic_metas_;
+
+  etl::unordered_map<int, etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES>
+      service_metas_;
 
   std::unique_ptr<Thread> send_worker_;
   std::unique_ptr<Thread> recv_worker_;

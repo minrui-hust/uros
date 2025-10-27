@@ -25,7 +25,6 @@ template <typename TMsg> struct PublisherT : public PublisherBase {
 
 protected:
   Topic *topic_;
-  int seq_ = 0;
 };
 
 } // namespace uros

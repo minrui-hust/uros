@@ -25,7 +25,7 @@ template <typename TReq, typename TRsp> void ServerT<TReq, TRsp>::announce() {
 
 template <typename TReq, typename TRsp> void ServerT<TReq, TRsp>::spinOnce() {
   UROS_PRINT("server '%d' spinOnce\n", id_);
-  if (service_->readReq(req_, seq_)) {
+  if (service_->readReq(req_, version_)) {
     rsp_.__meta__.sys = req_.__meta__.sys;
     rsp_.__meta__.id.rsp = req_.__meta__.id.req;
     cb_(req_, rsp_);
