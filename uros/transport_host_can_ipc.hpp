@@ -3,9 +3,14 @@
 #include "can_v2.h"
 #include "transport_host_can_ipc.h"
 
+uint32_t transportcanipc_send_count = 0;
+uint32_t transportcanipc_send_len = 0;
+uint32_t transportcanipc_recv_count = 0;
+uint32_t transportcanipc_recv_len = 0;
+
 namespace uros {
 
-inline void TransportHostIpc::initIpc(uint32_t instance, uint32_t id) {
+inline void TransportHostCanIpc::initCanIpc(uint32_t instance, uint32_t id) {
   int ret = 0;
   char chan_name[IPC_CHAN_NAME_MAXLEN] = {'\0'};
 
@@ -41,10 +46,10 @@ inline void TransportHostIpc::initIpc(uint32_t instance, uint32_t id) {
   return;
 }
 
-TransportHostIpc::~TransportHostIpc() { hb_ipcfhal_deinit(&ch_); }
+TransportHostCanIpc::~TransportHostCanIpc() { hb_ipcfhal_deinit(&ch_); }
 
-inline int TransportHostIpc::send(const void* data, size_t len, int prio,
-                                  int timeout_ms) {
+inline int TransportHostCanIpc::send(const void* data, size_t len, int prio,
+                                     int timeout_ms) {
   int ret = 0;
   if ((data == NULL) || (len > 128) || (timeout_ms < -1)) {
     return -1;
@@ -54,35 +59,47 @@ inline int TransportHostIpc::send(const void* data, size_t len, int prio,
   can_msg.len = len;
   memcpy(can_msg.data, data, len);  // todo:一次最大64
   tx_mutexs_.lock();
-  ret = hb_ipcfhal_send(&can_msg, sizeof(CanMsg), &ch_);
+  ret = hb_ipcfhal_send(reinterpret_cast<const uint8_t*>(&can_msg), len + 4,
+                        &ch_);
   tx_mutexs_.unlock();
-  if (ret != len) { /*return data_len*/
+  if (ret != (len + 4)) { /*return data_len*/
     UROS_PRINT("Ins[%u]Ch[%u]TxCnt send failed\n", ch_.instance, ch_.id);
   }
-  return ret;
+
+  // printf("transportCanIpc send len %d\n", ret);
+  transportcanipc_send_count++;
+  transportcanipc_send_len += ret;
+
+  return can_msg.len;
 }
 
-inline int TransportHostIpc::recv(void* data, size_t len, int* prio,
-                                  int timeout_ms) {
+inline int TransportHostCanIpc::recv(void* data, size_t len, int* prio,
+                                     int timeout_ms) {
   int ret = 0;
   if ((data == NULL) || (len <= 0) || (timeout_ms < -1)) {
     return -1;
   }
   CanMsg can_msg = {0};
   rx_mutexs_.lock();
-  ret = hb_ipcfhal_recv(&can_msg, sizeof(CanMsg), timeout_ms,
-                        &ch_);  // 单次接收不超过68
+  ret = hb_ipcfhal_recv(reinterpret_cast<uint8_t*>(&can_msg), sizeof(CanMsg),
+                        timeout_ms,
+                        &ch_);  // 单次接收不超过64
+
   rx_mutexs_.unlock();
-  *prio = can_msg.id;
-  memcpy(data, can_msg.data, can_msg.len);
+  // printf("transportCanIpc recv len %d\n", ret);
+  transportcanipc_recv_count++;
   if (ret < 0) {
     if (ret == -IPCF_HAL_E_TIMEOUT)
       UROS_PRINT("no recvice data\n");
     else
       UROS_PRINT("Ins[%u]Ch[%u] recv failed: %d\n", ch_.instance, ch_.id, ret);
+  } else {
+    transportcanipc_recv_len += ret;
+    *prio = can_msg.id;
+    memcpy(data, can_msg.data, can_msg.len);
   }
 
-  return ret;
+  return can_msg.len;
 }
 
 }  // namespace uros

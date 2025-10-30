@@ -9,26 +9,25 @@ uint32_t can_total_recv_len = 0;
 
 namespace uros {
 
-inline void TransportCan::initCan(const char *can_name, int can_id) {
-
-  //打开can设备
+inline void TransportCan::initCan(const char* can_name, int can_id) {
+  // 打开can设备
   can_ = Device::open<CanV2>(can_name);
 
-  //配置滤波器
+  // 配置滤波器
   can_->addFilterWithMask(can_id, 0x7ff, 0);
 }
 
-inline int TransportCan::send(const void *data, size_t len, int prio,
+inline int TransportCan::send(const void* data, size_t len, int prio,
                               int timeout_ms) {
   can_send_count++;
-  UROS_PRINT("transport_remote_socket.send: %zu\n", len);
+  // UROS_PRINT("transport_can.send len: %zu\n", len);
   prio = (prio > 0x7ff) ? 0x7ff : prio;
-  uint32_t send_len = can_->send((void *)data, len, prio, timeout_ms);
+  uint32_t send_len = can_->send((void*)data, len, prio, timeout_ms);
   can_total_send_len += send_len;
   return send_len;
 }
 
-inline int TransportCan::recv(void *data, size_t len, int *prio,
+inline int TransportCan::recv(void* data, size_t len, int* prio,
                               int timeout_ms) {
   can_recv_count++;
   CanMsg can_msg = {0};
@@ -38,8 +37,8 @@ inline int TransportCan::recv(void *data, size_t len, int *prio,
   memcpy(data, can_msg.data, can_msg.len);
   can_total_recv_len += can_msg.len;
 
-  UROS_PRINT("transport_remote_socket.recv: %d\n", received);
-  return received;
+  // printf("transport_can.recv len: %d\n", received);
+  return can_msg.len;
 }
 
-} // namespace uros
+}  // namespace uros

@@ -15,8 +15,8 @@ namespace uros {
 #define SMP_CFG_FILE "/etc/ipcfhal_config.json"
 #define IPC_CHAN_NAME_MAXLEN (128u)
 
-struct TransportHostIpc : public TransportBase {
-  void initIpc(uint32_t instance, uint32_t id);
+struct TransportHostCanIpc : public TransportBase {
+  void initCanIpc(uint32_t instance, uint32_t id);
 
   int send(const void* data, size_t len, int prio, int timeout_ms) override;
 
@@ -25,7 +25,7 @@ struct TransportHostIpc : public TransportBase {
   // Returns the number of bytes in the received packet, or -1 on error
   int recv(void* data, size_t len, int* prio, int timeout_ms) override;
 
-  ~TransportHostIpc();
+  ~TransportHostCanIpc();
 
  private:
   bool enabled_ = false;
