@@ -68,17 +68,21 @@ void TopicT<TMsg>::write(TransportBase *tsp, const MsgBase *msg) {
   notify(tsp);
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(TMsg &msg, int &ver) {
+template <typename TMsg> size_t TopicT<TMsg>::read(TMsg &msg, int &ver) {
   LockGuard<CriticalLock> lg;
   if (int(version_ - ver) > 0) {
     msg = msg_;
     ver = version_;
-    return true;
+    if constexpr (std::is_same_v<TMsg, ByteStream>) {
+      return msg.__meta__.id.msg.len;
+    } else {
+      return sizeof(TMsg); // TODO: use __meta__.id.msg.len for all msg
+    }
   }
-  return false;
+  return 0;
 }
 
-template <typename TMsg> bool TopicT<TMsg>::read(MsgBase *msg, int &seq) {
+template <typename TMsg> size_t TopicT<TMsg>::read(MsgBase *msg, int &seq) {
   return read(*static_cast<TMsg *>(msg), seq);
 }
 
