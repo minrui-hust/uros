@@ -77,6 +77,9 @@ using RspBase = ReqBase;
 struct __attribute__((packed)) ByteStream : MsgBase {
   uint8_t data[UROS_MSG_MAX_SIZE - sizeof(MsgBase)];
 
+  int16_t &len() { return __meta__.id.msg.len; }
+  const int16_t &len() const { return __meta__.id.msg.len; }
+
   // override copy constructor and assignment to handle valid data only
 
   ByteStream(const ByteStream &other) {
