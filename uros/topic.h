@@ -29,7 +29,7 @@ struct TopicBase {
   bool registerTransport(TransportBase *tsp);
 
   virtual void write(TransportBase *tsp, const MsgBase *msg) = 0;
-  virtual bool read(MsgBase *msg, int &seq) = 0;
+  virtual size_t read(MsgBase *msg, int &seq) = 0;
 
   virtual ~TopicBase() = default;
 
@@ -65,8 +65,8 @@ template <typename TMsg> struct TopicT : public TopicBase {
   void write(TransportBase *tsp, const MsgBase *msg) override;
 
   // read msg on topic
-  bool read(TMsg &msg, int &gen);
-  bool read(MsgBase *msg, int &gen) override;
+  size_t read(TMsg &msg, int &gen);
+  size_t read(MsgBase *msg, int &gen) override;
 
 protected:
   bool update(const TMsg &msg);
