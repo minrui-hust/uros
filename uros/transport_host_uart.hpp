@@ -1,13 +1,14 @@
 #pragma once
 
 #include <fcntl.h>
-#include <iomanip>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <time.h>
+
+#include <iomanip>
 
 #include "transport_host_uart.h"
 
@@ -27,8 +28,8 @@ uint32_t seq_id_err = 0;
 
 namespace uros {
 
-inline void TransportHostUart::initHostUart(const char *dev_name) {
-  //打开设备
+inline void TransportHostUart::initHostUart(const char* dev_name) {
+  // 打开设备
   fd_ = open(dev_name, O_RDWR | O_NOCTTY);
   if (fd_ < 0) {
     perror("open");
@@ -39,25 +40,25 @@ inline void TransportHostUart::initHostUart(const char *dev_name) {
   tcgetattr(fd_, &tty);
   cfsetospeed(&tty, B115200);
   cfsetispeed(&tty, B115200);
-  tty.c_cflag |= (CLOCAL | CREAD); // 本地连接 + 启用接收
-  tty.c_cflag &= ~PARENB;          // 无校验
-  tty.c_cflag &= ~CSTOPB;          // 1停止位
-  tty.c_cflag &= ~CSIZE;           // 清除数据位掩码
-  tty.c_cflag |= CS8;              // 8数据位
+  tty.c_cflag |= (CLOCAL | CREAD);  // 本地连接 + 启用接收
+  tty.c_cflag &= ~PARENB;           // 无校验
+  tty.c_cflag &= ~CSTOPB;           // 1停止位
+  tty.c_cflag &= ~CSIZE;            // 清除数据位掩码
+  tty.c_cflag |= CS8;               // 8数据位
   tty.c_lflag &= ~(
       ICANON | ECHO | ECHOE |
-      ISIG); //禁用规范模式
-             //,禁用输入字符的回显,禁用擦除字符的回显,禁用中断、退出等特殊信号字符处理
-  tty.c_iflag &= ~(IXON | IXOFF | IXANY); //禁用软件输出/输入流控制
-  tty.c_oflag &= ~OPOST; //禁用输出处理 - 输出原始数据，不进行任何转换
+      ISIG);  // 禁用规范模式
+              //,禁用输入字符的回显,禁用擦除字符的回显,禁用中断、退出等特殊信号字符处理
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY);  // 禁用软件输出/输入流控制
+  tty.c_oflag &= ~OPOST;  // 禁用输出处理 - 输出原始数据，不进行任何转换
 
   // **关闭输入输出中的回车/换行转换**:cite[6]
-  tty.c_iflag &= ~(ICRNL | INLCR); // 禁止CR->NL, NL->CR转换
-  tty.c_oflag &= ~(ONLCR | OCRNL); // 禁止输出中的NL->CR-NL映射等
+  tty.c_iflag &= ~(ICRNL | INLCR);  // 禁止CR->NL, NL->CR转换
+  tty.c_oflag &= ~(ONLCR | OCRNL);  // 禁止输出中的NL->CR-NL映射等
 
   // 设置读取超时，避免阻塞
-  tty.c_cc[VMIN] = 1;  // 至少读取1个字符才返回
-  tty.c_cc[VTIME] = 0; // 无限等待，不超时
+  tty.c_cc[VMIN] = 1;   // 至少读取1个字符才返回
+  tty.c_cc[VTIME] = 0;  // 无限等待，不超时
 
   tcsetattr(fd_, TCSANOW, &tty);
 
@@ -65,15 +66,15 @@ inline void TransportHostUart::initHostUart(const char *dev_name) {
   tcflush(fd_, TCIOFLUSH);
 }
 
-inline int TransportHostUart::send(const void *data, size_t len, int prio,
+inline int TransportHostUart::send(const void* data, size_t len, int prio,
                                    int timeout_ms) {
   UROS_PRINT("transport_remote_socket.send: %zu\n", len);
-  //封包
-  // uint32_t packer_size =
-  //     packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
-  // return write(fd_, send_buf_, packer_size);
+  // 封包
+  //  uint32_t packer_size =
+  //      packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
+  //  return write(fd_, send_buf_, packer_size);
 
-  Header send_header = packer_.buildPacket2((const uint8_t *)data, len);
+  Header send_header = packer_.buildPacket2((const uint8_t*)data, len);
   uint32_t send_len = write(fd_, &send_header, sizeof(Header));
   tcdrain(fd_);
   send_len += write(fd_, data, len);
@@ -81,6 +82,41 @@ inline int TransportHostUart::send(const void *data, size_t len, int prio,
   return send_len;
 }
 
+inline int TransportHostUart::recv(void* data, size_t len, int* prio,
+                                   int timeout_ms) {
+  // 直接读packer的buf
+  int32_t read_buf_len = packer_.getData((uint8_t*)data, len);
+  if (read_buf_len > 0) {
+    ret++;
+    return read_buf_len;
+  }
+
+  int32_t get_packer = 0;
+  uint32_t ret_len = 0;
+  while (!get_packer) {
+    int received = read(fd_, recv_buf_, len);
+    total_recv_len += received;
+
+    if (received < 0) {
+      std::cout << "read error " << std::endl;
+    } else {
+      // 解包
+      packer_.putData(recv_buf_, received);
+      read_buf_len = packer_.getData((uint8_t*)data, len);
+
+      if (read_buf_len > 0) {
+        ret++;
+        return read_buf_len;
+      }
+    }
+  }
+
+  // UROS_PRINT("transport_remote_socket.recv: %d\n", received);
+  // ret++;
+  // return ret_len;
+}
+
+/*
 inline int TransportHostUart::recv(void *data, size_t len, int *prio,
                                    int timeout_ms) {
   //直接读packer的buf
@@ -110,6 +146,7 @@ inline int TransportHostUart::recv(void *data, size_t len, int *prio,
   ret++;
   return ret_len;
 }
+*/
 
 // inline int TransportHostUart::recv(void *data, size_t len, int *prio,
 //                                    int timeout_ms) {
@@ -206,4 +243,4 @@ inline int TransportHostUart::recv(void *data, size_t len, int *prio,
 //   return ret_len;
 // }
 
-} // namespace uros
+}  // namespace uros

@@ -82,8 +82,7 @@ inline int TransportHostCanIpc::recv(void* data, size_t len, int* prio,
   CanMsg can_msg = {0};
   rx_mutexs_.lock();
   ret = hb_ipcfhal_recv(reinterpret_cast<uint8_t*>(&can_msg), sizeof(CanMsg),
-                        timeout_ms,
-                        &ch_);  // 单次接收不超过64
+                        timeout_ms, &ch_);  // 单次接收不超过64
 
   rx_mutexs_.unlock();
   // printf("transportCanIpc recv len %d\n", ret);
