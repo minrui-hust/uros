@@ -1,7 +1,15 @@
+#ifndef PACKER_H
+#define PACKER_H
+
+#include <cstdio>
+
+#include "string.h"
+
 #define PACKER_BUF_DATA_SIZE 256
 #define PACKER_BUF_SIZE 4
 
-uint32_t success = 0;
+uint32_t unpack_success;
+uint32_t buf_overrun_count;
 
 struct __attribute__((aligned(4))) Header {
   uint8_t preamble;
@@ -218,11 +226,13 @@ class PacketParser {
 
             if (calculated_crc8_ == header_.crc8) {
               // CRC校验成功
-              success++;
+              unpack_success++;
 
               // 将解包完成的数据包存起来
               if (write_buf(recv_buf + i, header_.len) == -1) {
                 buf_overrun_++;
+                buf_overrun_count++;
+                printf("packer buf overrun\n");
               }
 
               // 跳过已处理的数据
@@ -256,11 +266,13 @@ class PacketParser {
               calculated_crc8_ = calculateCRC8(data_buffer_, header_.len);
 
               if (calculated_crc8_ == header_.crc8) {
-                success++;
+                unpack_success++;
                 printf("data_buffer_ crc right\n");
 
                 if (write_buf(data_buffer_, header_.len) == -1) {
                   buf_overrun_++;
+                  buf_overrun_count++;
+                  printf("packer buf overrun\n");
                 }
 
                 reset();
@@ -284,51 +296,25 @@ class PacketParser {
     return 0;
   }
 
-  // // 传入数据进行解包
-  // int32_t putDataOneByte(const uint8_t* recv_buf, uint32_t received) {
-  //   uint16_t packets_found = 0;
+  // 传入数据进行解包
+  int32_t putDataOneByte(const uint8_t* recv_buf, uint32_t received) {
+    uint16_t packets_found = 0;
 
-  //   for (uint16_t i = 0; i < received; i++) {
-  //     if (processByte(recv_buf[i])) {
-  //       packets_found++;
+    for (uint16_t i = 0; i < received; i++) {
+      if (processByte(recv_buf[i])) {
+        packets_found++;
+        // 将数据保存起来
+        if (write_buf(data_buffer_, header_.len) == -1) {
+          buf_overrun_++;
+          buf_overrun_count++;
+          printf("packer buf overrun\n");
+        }
+        reset();
+      }
+    }
 
-  //       if (first_recv_seq_id) {
-  //         last_seq_id_ = header_.seq_id;
-  //         first_recv_seq_id = 0;
-  //         seq_id_right_++;
-
-  //       } else {
-  //         cur_seq_id = header_.seq_id;
-  //         if (((cur_seq_id == 0) && (last_seq_id_ == 255)) ||
-  //             ((cur_seq_id - last_seq_id_) == 1)) {
-  //           seq_id_right_++;
-  //         } else {
-  //           seq_id_err_++;
-  //           // MyPrintf("seq_id err !!!cur:% d, last:%d\n", cur_seq_id,
-  //           //          last_seq_id_);
-  //         }
-  //         last_seq_id_ = cur_seq_id;
-  //       }
-
-  //       if (length < header_.len) {
-  //         return -1;
-  //       }
-
-  //       if (packets_found == 1) {
-  //         memcpy(data, data_buffer_, header_.len);
-  //         *data_len = header_.len;
-  //       } else {
-  //         repeat_unpacke_++;
-  //         if (write_buf(data_buffer_, header_.len) == -1) {
-  //           buf_overrun_++;
-  //         }
-  //       }
-  //       reset();
-  //     }
-  //   }
-
-  //   return packets_found;  // 成功解析，返回一包数据长度
-  // }
+    return packets_found;
+  }
 
   // 批量处理数据
   int32_t processBuffer(const uint8_t* recv_buf, uint32_t received,
@@ -399,6 +385,8 @@ class PacketParser {
                 repeat_unpacke_++;
                 if (write_buf(recv_buf + i, header_.len) == -1) {
                   buf_overrun_++;
+                  buf_overrun_count++;
+                  printf("packer buf overrun\n");
                 }
               }
 
@@ -444,6 +432,8 @@ class PacketParser {
                   repeat_unpacke_++;
                   if (write_buf(data_buffer_, header_.len) == -1) {
                     buf_overrun_++;
+                    buf_overrun_count++;
+                    printf("packer buf overrun\n");
                   }
                 }
               } else {
@@ -871,3 +861,5 @@ class PacketParser {
     return data_len;  // 返回实际读取的数据长度
   }
 };
+
+#endif

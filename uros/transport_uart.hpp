@@ -28,15 +28,8 @@ inline void TransportUart::initUart(const char* uart_name) {
 
 inline int TransportUart::send(const void* data, size_t len, int prio,
                                int timeout_ms) {
-  UROS_PRINT("transport_remote_socket.send: %zu\n", len);
   send_count++;
   // 封包
-  //  uint32_t packer_size =
-  //      packer_.buildPacket((const uint8_t *)data, len, send_buf_, MAX_SIZE);
-  //  uint32_t send_len =
-  //      uart_->send((const char *)send_buf_, packer_size, timeout_ms);
-  //  total_send_len += send_len;
-
   Header send_header = packer_.buildPacket2((const uint8_t*)data, len);
   uint32_t send_len =
       uart_->send((const char*)&send_header, sizeof(Header), timeout_ms);
@@ -54,15 +47,14 @@ inline int TransportUart::recv(void* data, size_t len, int* prio,
     return read_buf_len;
   }
 
-  int32_t get_packer = 0;
   uint32_t ret_len = 0;
-  while (!get_packer) {
+  while (1) {
     int received = uart_->recv((char*)recv_buf_, len, timeout_ms);
 
     recv_count += received;
 
     // 解包
-    packer_.putData(recv_buf_, received);
+    packer_.putDataOneByte(recv_buf_, received);
     // 获取完整数据
     read_buf_len = packer_.getData((uint8_t*)data, len);
     if (read_buf_len > 0) {
@@ -70,10 +62,6 @@ inline int TransportUart::recv(void* data, size_t len, int* prio,
       return read_buf_len;
     }
   }
-
-  // UROS_PRINT("transport_remote_socket.recv: %d\n", received);
-  // ret++;
-  // return ret_len;
 }
 
 /*
