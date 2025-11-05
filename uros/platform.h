@@ -13,7 +13,7 @@
 #endif
 
 #ifdef PLATFORM_FREERTOS
-#include "os_hal/freertos_.h"
+#include "os_hal/freertos.h"
 #endif
 
-#include "os_hal/common_.h"
+#include "os_hal/common.h"
