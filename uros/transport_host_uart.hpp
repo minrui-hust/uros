@@ -14,11 +14,8 @@
 
 uint32_t total_send_len = 0;
 uint32_t total_recv_len = 0;
-uint32_t unpack_success = 0;
-uint32_t repeat_unpacke = 0;
-uint32_t ret = 0;
+uint32_t recv_ret_count = 0;
 uint32_t ret_buf = 0;
-uint32_t buf_overrun = 0;
 
 uint8_t cur_seq_id = 0;
 uint8_t last_seq_id = 0;
@@ -87,13 +84,11 @@ inline int TransportHostUart::recv(void* data, size_t len, int* prio,
   // 直接读packer的buf
   int32_t read_buf_len = packer_.getData((uint8_t*)data, len);
   if (read_buf_len > 0) {
-    ret++;
+    recv_ret_count++;
     return read_buf_len;
   }
 
-  int32_t get_packer = 0;
-  uint32_t ret_len = 0;
-  while (!get_packer) {
+  while (1) {
     int received = read(fd_, recv_buf_, len);
     total_recv_len += received;
 
@@ -105,15 +100,11 @@ inline int TransportHostUart::recv(void* data, size_t len, int* prio,
       read_buf_len = packer_.getData((uint8_t*)data, len);
 
       if (read_buf_len > 0) {
-        ret++;
+        recv_ret_count++;
         return read_buf_len;
       }
     }
   }
-
-  // UROS_PRINT("transport_remote_socket.recv: %d\n", received);
-  // ret++;
-  // return ret_len;
 }
 
 /*

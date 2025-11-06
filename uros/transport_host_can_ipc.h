@@ -7,6 +7,7 @@
 #include <mutex>
 
 #include "ipc.h"
+#include "packer.h"
 #include "transport.h"
 
 namespace uros {
@@ -32,6 +33,12 @@ struct TransportHostCanIpc : public TransportBase {
   std::mutex tx_mutexs_;
   std::mutex rx_mutexs_;
   ipcfhal_chan_t ch_;
+
+  static const uint16_t MAX_SIZE = 512;
+  uint8_t recv_buf_[MAX_SIZE] = {0};
+  uint8_t send_buf_[MAX_SIZE] = {0};
+
+  PacketParser packer_;
 };
 
 }  // namespace uros
