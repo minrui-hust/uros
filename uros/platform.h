@@ -9,11 +9,11 @@
 #endif
 
 #ifdef PLATFORM_LINUX
-#include "os_hal/linux.h"
+#include "os_hal/oal_linux.h"
 #endif
 
 #ifdef PLATFORM_FREERTOS
-#include "os_hal/freertos.h"
+#include "os_hal/oal_freertos.h"
 #endif
 
-#include "os_hal/common.h"
+#include "os_hal/oal_common.h"
