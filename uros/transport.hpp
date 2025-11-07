@@ -74,7 +74,7 @@ inline void TransportBase::init() {
 
 template <typename Topic>
 void TransportBase::notify(Topic *topic) {
-  ThreadNotify(send_worker_.get(), 1 << topic->id());
+  ThreadNotify(send_worker_.get(), topic_metas_[topic->id()]->mask);
 }
 
 template <typename Service>
