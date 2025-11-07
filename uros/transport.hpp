@@ -96,7 +96,7 @@ inline void TransportBase::sendWork() {
     UROS_PRINT("TransportBase::sendWork: wait done, 0x%x\n", flags);
 
     for (auto &[_, meta] : topic_metas_) {
-      if (flags & (1 << meta->mask)) {
+      if (flags & meta->mask) {
         if (meta->topic->read(&send_buf_.msg, meta->seq)) {
           send(&send_buf_.msg, meta->topic->msgSize(), meta->topic->prio(), -1);
         }
