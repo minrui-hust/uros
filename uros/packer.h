@@ -10,6 +10,7 @@
 
 uint32_t unpack_success;
 uint32_t buf_overrun_count;
+uint32_t crc_error;
 
 struct __attribute__((aligned(4))) Header {
   uint8_t preamble;
@@ -125,19 +126,22 @@ class PacketParser {
           break;
         }
 
+        // if (header_.len == 0) {
+        //   // 没有数据载荷，直接进行CRC校验
+        //   calculated_crc8_ = calculateCRC8(nullptr, 0);
+        //   if (calculated_crc8_ == header_.crc8) {
+        //     // CRC校验成功
+        //     reset();
+        //     return true;
+        //   } else {
+        //     reset();  // CRC校验失败
+        //   }
+        // } else {
+        //   state_ = STATE_PAYLOAD;
+        //   data_buffer_cur_len_ = 0;
+        // }
         if (header_.len == 0) {
-          // 没有数据载荷，直接进行CRC校验
-          calculated_crc8_ = calculateCRC8(nullptr, 0);
-          if (calculated_crc8_ == header_.crc8) {
-            // CRC校验成功
-            reset();
-            return true;
-          } else {
-            reset();  // CRC校验失败
-          }
-        } else {
-          state_ = STATE_PAYLOAD;
-          data_buffer_cur_len_ = 0;
+          reset();
         }
         break;
 
@@ -157,6 +161,9 @@ class PacketParser {
             } else {
               // CRC校验失败
               crc_err_++;
+              crc_error++;
+              printf("crc err,header:%d,%d,%d\n", header_.preamble,
+                     header_.crc8, header_.len);
               reset();
             }
           }
@@ -267,19 +274,30 @@ class PacketParser {
 
               if (calculated_crc8_ == header_.crc8) {
                 unpack_success++;
-                printf("data_buffer_ crc right\n");
+                // printf("data_buffer_ crc right\n");
 
                 if (write_buf(data_buffer_, header_.len) == -1) {
                   buf_overrun_++;
                   buf_overrun_count++;
                   printf("packer buf overrun\n");
                 }
-
                 reset();
 
               } else {
                 crc_err_++;
+                crc_error++;
                 printf("crc_err 2:%d\n", crc_err_);
+                printf("header:%x,%x,%x\n", header_.preamble, header_.crc8,
+                       header_.len);
+                printf("err seq:%x\n", data_buffer_[4]);
+
+                printf("calculated_crc8_:%x\n", calculated_crc8_);
+
+                for (uint32_t k = 0; k < header_.len; k++) {
+                  printf("%x ", data_buffer_[k]);
+                }
+                printf("\n");
+
                 reset();
               }
             }

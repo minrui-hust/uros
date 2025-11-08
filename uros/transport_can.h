@@ -7,7 +7,7 @@
 namespace uros {
 
 struct TransportCan : public TransportBase {
-  void initCan(const char* can_name, int can_id);
+  void initCan(const char* can_name);
 
   int send(const void* data, size_t len, int prio, int timeout_ms) override;
 
