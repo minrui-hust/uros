@@ -17,6 +17,7 @@ struct ServiceBase;
 struct TopicMeta {
   TopicBase *topic = nullptr;
   int seq = -1;
+  uint32_t mask = 0;
 };
 
 struct ServiceMeta {
@@ -25,7 +26,6 @@ struct ServiceMeta {
 };
 
 struct TransportBase {
-
   // accessers
   auto &id() { return id_; }
   const auto &id() const { return id_; }
@@ -34,19 +34,18 @@ struct TransportBase {
 
   void init();
 
-  template <typename Topic> void notify(Topic *topic);
+  template <typename Topic>
+  void notify(Topic *topic);
 
   template <typename Service>
-  bool sendReq(Service *service, const typename Service::Req &req,
-               int timeout_ms);
+  bool sendReq(Service *service, const typename Service::Req &req, int timeout_ms);
 
   template <typename Service>
-  bool sendServiceAnnounce(Service *service, const MsgBase &sbc,
-                           int timeout_ms);
+  bool sendServiceAnnounce(Service *service, const MsgBase &sbc, int timeout_ms);
 
   virtual ~TransportBase() = default;
 
-protected:
+ protected:
   void sendWork();
 
   void recvWork();
@@ -59,22 +58,18 @@ protected:
   void recvServiceBroadcast(const MsgBase *msg, size_t len);
 
   // thread safe
-  virtual int send(const void *data, size_t len, int prio,
-                   int timeout_ms = -1) = 0;
+  virtual int send(const void *data, size_t len, int prio, int timeout_ms = -1) = 0;
 
   // thread safe
-  virtual int recv(void *data, size_t len, int *prio = nullptr,
-                   int timeout_ms = -1) = 0;
+  virtual int recv(void *data, size_t len, int *prio = nullptr, int timeout_ms = -1) = 0;
 
-protected:
+ protected:
   int32_t id_ = -1;
   uint32_t topic_bit_mask_ = 0;
 
-  etl::unordered_map<int, etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS>
-      topic_metas_;
+  etl::unordered_map<int, etl::unique_ptr<TopicMeta>, UROS_MAX_TOPICS> topic_metas_;
 
-  etl::unordered_map<int, etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES>
-      service_metas_;
+  etl::unordered_map<int, etl::unique_ptr<ServiceMeta>, UROS_MAX_SERVICES> service_metas_;
 
   std::unique_ptr<Thread> send_worker_;
   std::unique_ptr<Thread> recv_worker_;
@@ -103,29 +98,31 @@ protected:
 };
 
 struct TransportManager {
-  template <typename Transport> static Transport *AddTransport() {
+  template <typename Transport>
+  static Transport *AddTransport() {
     return Instance().addTransport<Transport>();
   }
 
   static void Init() { return Instance().init(); }
 
-protected:
+ protected:
   static TransportManager &Instance() {
     static TransportManager inst;
     return inst;
   }
 
-  template <typename Transport> Transport *addTransport();
+  template <typename Transport>
+  Transport *addTransport();
 
   void init();
 
-protected:
+ protected:
   TransportManager() = default;
   TransportManager(const TransportManager &other) = delete;
   TransportManager &operator=(const TransportManager &other) = delete;
 
-protected:
+ protected:
   etl::vector<etl::unique_ptr<TransportBase>, UROS_MAX_TRANSPORTS> tsps_;
 };
 
-} // namespace uros
+}  // namespace uros
