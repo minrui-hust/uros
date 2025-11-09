@@ -19,7 +19,7 @@ struct RspAdd2 : uros::RspBase {
 void uros_init(int client_id) {
   uros::InitGuard g(client_id);
 
-  uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
+  uros::RegisterService<ReqAdd2, RspAdd2>("/add2");
 
   // 配置UDP组播传输
   auto transport_multicast =
@@ -88,9 +88,9 @@ int main(int argc, char *argv[]) {
 
     if (success) {
       success_count++;
-      std::cout << "[CLIENT-" << client_id << "] ✅ Response: " << req.a << " + "
-                << req.b << " = " << rsp.c << " (took " << duration.count()
-                << "ms)" << std::endl;
+      std::cout << "[CLIENT-" << client_id << "] ✅ Response: " << req.a
+                << " + " << req.b << " = " << rsp.c << " (took "
+                << duration.count() << "ms)" << std::endl;
     } else {
       std::cout << "[CLIENT-" << client_id << "] ❌ FAILED (timeout after "
                 << duration.count() << "ms)" << std::endl;

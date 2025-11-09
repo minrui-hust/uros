@@ -1,7 +1,9 @@
 #pragma once
 
 #include <climits>
+#include <cstring>
 
+#include "etl/murmur3.h"
 #include "etl/vector.h"
 
 #include "platform.h"
@@ -19,14 +21,17 @@ struct TransportMeta {
   TransportBase *tsp = nullptr;
   int dist = INT_MAX;
   int sys_nxt = -1;
+  int sys_dst = -1;
 };
 
 struct ServiceBase {
-  ServiceBase(const char *name, int id, type_id_t req_type, type_id_t rsp_type,
+  ServiceBase(const char *name, type_id_t req_type, type_id_t rsp_type,
               size_t req_size, size_t rsp_size)
-      : id_(id), name_(name), req_type_(req_type), rsp_type_(rsp_type),
+      : name_(name), req_type_(req_type), rsp_type_(rsp_type),
         req_size_(req_size), rsp_size_(rsp_size) {
-    sbc_.__meta__.id.sbc.seq = -1;
+    id_ = calc_entry_hash(name);
+
+    sbc_.seq = -1;
   }
 
   // properti accessors
@@ -62,7 +67,7 @@ protected:
 
   int req_version_ = -1;
 
-  MsgBase sbc_;
+  ServiceBroadcast sbc_;
 
   etl::array<etl::unique_ptr<TransportMeta>, UROS_MAX_TRANSPORTS> tsp_metas_{};
 };
@@ -75,15 +80,15 @@ template <typename TReq, typename TRsp> struct ServiceT : public ServiceBase {
 
   using ServiceCallback = std::function<void(const Req &, Rsp &)>;
 
-  ServiceT(const char *name, int id)
-      : ServiceBase(name, id, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
+  ServiceT(const char *name)
+      : ServiceBase(name, type_id<TReq>(), type_id<TRsp>(), sizeof(TReq),
                     sizeof(TRsp)) {}
 
   ClientT<Req, Rsp> *addClient();
 
   ServerT<Req, Rsp> *addServer(const ServiceCallback &cb);
 
-  void writeServiceBroadcast(Server *srv, const MsgBase &sbc);
+  void writeServiceBroadcast(Server *srv, const ServiceBroadcast &sbc);
   void writeServiceBroadcast(TransportBase *tsp, const MsgBase *sbc) override;
 
   // call the service
@@ -106,9 +111,10 @@ protected:
   bool onServering() const { return srvs_.size() > 0; }
   void writeRsp(const Rsp &rsp);
 
-  bool updateServiceBroadcast(const MsgBase &sbc, int seq);
-  bool updateServiceBroadcast(TransportBase *tsp, const MsgBase &sbc, int seq);
-  void forwardServiceBroadcast(TransportBase *tsp, const MsgBase &sbc);
+  bool updateServiceBroadcast(const ServiceBroadcast &sbc, int seq);
+  bool updateServiceBroadcast(TransportBase *tsp, const ServiceBroadcast &sbc,
+                              int seq);
+  void forwardServiceBroadcast(TransportBase *tsp, const ServiceBroadcast &sbc);
 
 protected:
   etl::vector<etl::unique_ptr<Server>, UROS_SERVICE_MAX_SRVS> srvs_;
@@ -122,9 +128,8 @@ protected:
 
 struct ServiceManager {
 
-  template <typename Service>
-  static Service *AddService(const char *name, int id) {
-    return Instance().addService<Service>(name, id);
+  template <typename Service> static Service *AddService(const char *name) {
+    return Instance().addService<Service>(name);
   }
 
   template <typename Service> static Service *FindService(const char *name) {
@@ -137,7 +142,7 @@ protected:
     return inst;
   }
 
-  template <typename Service> Service *addService(const char *name, int id);
+  template <typename Service> Service *addService(const char *name);
 
   template <typename Service> Service *findService(const char *name);
 

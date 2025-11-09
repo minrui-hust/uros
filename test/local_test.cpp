@@ -17,8 +17,8 @@ struct MessageResponse : uros::MsgBase {
 void uros_init() {
   uros::InitGuard init_guard(0);
 
-  uros::RegisterTopic<MessageHello>("/hello", 0);
-  uros::RegisterTopic<MessageResponse>("/hello_response", 1);
+  uros::RegisterTopic<MessageHello>("/hello");
+  uros::RegisterTopic<MessageResponse>("/hello_response");
 }
 
 int main() {

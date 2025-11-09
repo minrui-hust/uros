@@ -24,9 +24,9 @@ template <typename TReq, typename TRsp> struct ServerT : ServerBase {
 
   ServerT(int id) : ServerBase(id) {
     sbc_.__meta__.type = MsgTypeServiceBroadcast;
-    sbc_.__meta__.sys = System::Id();
-    sbc_.__meta__.id.sbc.sys_from = System::Id();
-    sbc_.__meta__.id.sbc.dist = 0;
+    sbc_.__meta__.sys_src = System::Id();
+    sbc_.__meta__.sys_pre = System::Id();
+    sbc_.dist = 0;
 
     rsp_.__meta__.type = MsgTypeResponse;
   }
@@ -44,7 +44,7 @@ protected:
   Service *service_;
   ServiceCallback cb_;
 
-  MsgBase sbc_;
+  ServiceBroadcast sbc_;
   int sbc_seq_ = 0;
 
   etl::unique_ptr<Timer> announce_timer_{nullptr};
