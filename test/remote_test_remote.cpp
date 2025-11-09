@@ -17,8 +17,8 @@ struct MessageResponse : uros::MsgBase {
 void uros_init() {
   uros::InitGuard g(0);
 
-  uros::RegisterTopic<MessageHello>("/hello", 0);
-  uros::RegisterTopic<MessageResponse>("/hello_response", 1);
+  uros::RegisterTopic<MessageHello>("/hello");
+  uros::RegisterTopic<MessageResponse>("/hello_response");
 
   // config each transport
   auto transport_udp = uros::RegisterTransport<uros::TransportSocket>();

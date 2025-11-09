@@ -19,7 +19,7 @@ void uros_init() {
   uros::InitGuard g(0);
 
   // 注册 topic
-  uros::RegisterTopic<SensorData>("/sensor_data", 0);
+  uros::RegisterTopic<SensorData>("/sensor_data");
 
   // config each transport
   // Transport 1: 从 Producer (10001) 接收数据，监听 10002

@@ -38,7 +38,7 @@ Node::createSubscription(const char *topic_name,
 }
 
 template <typename Msg>
-PublisherT<Msg> *Node::createPublisher(const char *topic_name) {
+PublisherT<Msg> *Node::createPublisher(const char *topic_name, int prio) {
   using Topic = TopicT<Msg>;
   using Publisher = PublisherT<Msg>;
 

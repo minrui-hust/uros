@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstring>
+
+#include "etl/murmur3.h"
 #include "etl/vector.h"
 
 #include "platform.h"
@@ -14,10 +17,10 @@ namespace uros {
 struct TransportBase;
 
 struct TopicBase {
-  TopicBase(const char *name, int id, int prio, type_id_t msg_type,
-            size_t msg_size)
-      : id_(id), name_(name), prio_(prio), msg_type_(msg_type),
-        msg_size_(msg_size) {}
+  TopicBase(const char *name, int prio, type_id_t msg_type, size_t msg_size)
+      : name_(name), prio_(prio), msg_type_(msg_type), msg_size_(msg_size) {
+    id_ = calc_entry_hash(name);
+  }
 
   // property accessor
   const auto &id() const { return id_; }
@@ -25,6 +28,8 @@ struct TopicBase {
   const auto &prio() const { return prio_; }
   const type_id_t &msgType() const { return msg_type_; }
   const size_t &msgSize() const { return msg_size_; }
+
+  void setPrio(int prio) { prio_ = prio; }
 
   bool registerTransport(TransportBase *tsp);
 
@@ -34,9 +39,9 @@ struct TopicBase {
   virtual ~TopicBase() = default;
 
 protected:
-  int id_; // global unique identification of a topic
+  uint32_t id_; // global unique identification of a topic
   const char *name_;
-  int prio_;
+  int prio_ = -1;
   type_id_t msg_type_;
   size_t msg_size_;
   int version_ = -1;
@@ -52,8 +57,8 @@ template <typename TMsg> struct TopicT : public TopicBase {
   using Publisher = PublisherT<TMsg>;
   using Subscription = SubscriptionT<TMsg>;
 
-  TopicT(const char *name, int id, int prio)
-      : TopicBase(name, id, prio, type_id<TMsg>(), sizeof(TMsg)) {}
+  TopicT(const char *name, int prio)
+      : TopicBase(name, prio, type_id<TMsg>(), sizeof(TMsg)) {}
 
   PublisherT<Msg> *addPublisher();
 
@@ -79,8 +84,8 @@ protected:
 struct TopicManager {
 
   template <typename Topic>
-  static Topic *AddTopic(const char *name, int id, int prio) {
-    return Instance().addTopic<Topic>(name, id, prio);
+  static Topic *AddTopic(const char *name, int prio = 0) {
+    return Instance().addTopic<Topic>(name);
   }
 
   template <typename Topic> static Topic *FindTopic(const char *name) {
@@ -93,8 +98,7 @@ protected:
     return inst;
   }
 
-  template <typename Topic>
-  Topic *addTopic(const char *name, uint8_t id, uint8_t prio);
+  template <typename Topic> Topic *addTopic(const char *name, int prio = 0);
 
   template <typename Topic> Topic *findTopic(const char *name);
 

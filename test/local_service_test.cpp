@@ -19,7 +19,7 @@ struct RspAdd2 : uros::RspBase {
 void uros_init() {
   uros::InitGuard init_guard(0);
 
-  uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
+  uros::RegisterService<ReqAdd2, RspAdd2>("/add2");
 }
 
 int main() {

@@ -108,14 +108,15 @@ template <typename TMsg> void TopicT<TMsg>::notify(TransportBase *from_tsp) {
 }
 
 template <typename Topic>
-Topic *TopicManager::addTopic(const char *name, uint8_t id, uint8_t prio) {
+Topic *TopicManager::addTopic(const char *name, int prio) {
   if (topics_.full()) {
     return nullptr;
   }
 
   // create a new topic
-  auto topic = new Topic(name, id, prio);
+  auto topic = new Topic(name, prio);
   CHECK(topic);
+
   topics_.emplace_back(topic);
 
   return topic;

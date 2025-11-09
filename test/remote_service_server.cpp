@@ -18,7 +18,7 @@ struct RspAdd2 : uros::RspBase {
 void uros_init() {
   uros::InitGuard g(1);
 
-  uros::RegisterService<ReqAdd2, RspAdd2>("/add2", 0);
+  uros::RegisterService<ReqAdd2, RspAdd2>("/add2");
 
   // 配置远程传输 - 作为服务端
   auto transport_udp = uros::RegisterTransport<uros::TransportSocket>();
