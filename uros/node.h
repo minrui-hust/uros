@@ -35,7 +35,7 @@ struct Node {
                      const std::function<void(const TMsg &)> &cb);
 
   template <typename TMsg>
-  PublisherT<TMsg> *createPublisher(const char *topic_name, int prio = 0);
+  PublisherT<TMsg> *createPublisher(const char *topic_name);
 
   // service related api
   template <typename TReq, typename TRsp>
