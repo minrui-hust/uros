@@ -1,0 +1,3 @@
+[submodule "thirdparty/oal"]
+	path = thirdparty/oal
+	url = git@gitlab.dmduav.com:ind/thirdparty/oal.git
