@@ -1,3 +1,0 @@
-[submodule "thirdparty/os_hal"]
-	path = thirdparty/os_hal
-	url = git@gitlab.dmduav.com:ind/firmware/os_hal.git
