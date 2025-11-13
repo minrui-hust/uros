@@ -20,3 +20,15 @@ add_executable(remote_service_client remote_service_client.cpp)
 add_executable(multicast_service_server multicast_service_server.cpp)
 add_executable(multicast_service_client multicast_service_client.cpp)
 
+# bytestream tests
+add_executable(bytestream_test bytestream_test.cpp)
+add_executable(bytestream_simple_test bytestream_simple_test.cpp)
+
+# bytestream remote tests
+add_executable(bytestream_remote_local bytestream_remote_local.cpp)
+add_executable(bytestream_remote_remote bytestream_remote_remote.cpp)
+
+
+
+
+

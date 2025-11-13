@@ -73,11 +73,7 @@ template <typename TMsg> size_t TopicT<TMsg>::read(TMsg &msg, int &ver) {
   if (int(version_ - ver) > 0) {
     msg = msg_;
     ver = version_;
-    if constexpr (std::is_same_v<TMsg, ByteStream>) {
-      return msg.__meta__.len;
-    } else {
-      return sizeof(TMsg); // TODO: use __meta__.id.msg.len for all msg
-    }
+    return msg.__meta__.len + sizeof(MsgBase);
   }
   return 0;
 }

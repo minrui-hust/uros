@@ -101,8 +101,9 @@ inline void TransportBase::sendWork() {
 
     for (auto &[_, meta] : topic_metas_) {
       if (flags & meta->mask) {
-        if (meta->topic->read(&send_buf_.msg, meta->seq)) {
-          send(&send_buf_.msg, meta->topic->msgSize(), meta->topic->prio(), -1);
+        auto len = meta->topic->read(&send_buf_.msg, meta->seq);
+        if (len > 0) {
+          send(&send_buf_.msg, len, meta->topic->prio(), -1);
         }
       }
     }
@@ -178,8 +179,21 @@ inline void TransportBase::serviceWork() {
 inline void TransportBase::recvNormal(const MsgBase *msg, size_t len) {
   auto topic_id = msg->__meta__.entry_hash;
   auto iter = topic_metas_.find(topic_id);
-  if (iter == topic_metas_.end() || iter->second->topic->msgSize() != len) {
-    UROS_PRINT("Invalid msg\n");
+  if (iter == topic_metas_.end()) {
+    UROS_PRINT("Invalid msg: topic not found\n");
+    return;
+  }
+  
+  // For variable-length messages, check if the actual length matches the metadata
+  size_t expected_len = msg->__meta__.len + sizeof(MsgBase);
+  if (expected_len != len) {
+    UROS_PRINT("Invalid msg: len mismatch (received=%zu, expected=%zu)\n", len, expected_len);
+    return;
+  }
+  
+  // Check if the length is within the valid range
+  if (len < sizeof(MsgBase) || len > iter->second->topic->msgSize()) {
+    UROS_PRINT("Invalid msg: len out of range (len=%zu, max=%zu)\n", len, iter->second->topic->msgSize());
     return;
   }
 

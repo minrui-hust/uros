@@ -15,36 +15,6 @@ enum MsgType {
   MsgTypeServiceBroadcast = 3,
 };
 
-struct __attribute__((packed)) MsgId {
-  uint8_t topic;
-  int16_t len; // msg length without header
-};
-static_assert(sizeof(MsgId) == 3);
-
-struct __attribute__((packed)) SbcId {
-  uint32_t sys_from : 5;
-  uint32_t service : 6;
-  uint32_t dist : 5;
-  int8_t seq;
-};
-static_assert(sizeof(SbcId) == 3);
-
-struct __attribute__((packed)) ReqId {
-  uint32_t sys_from : 5;
-  uint32_t sys_to : 5;
-  uint32_t service : 6;
-  uint32_t client : 4;
-  uint32_t seq : 4;
-
-  bool operator==(const ReqId &other) {
-    return (service == other.service) && (client == other.client) &&
-           (seq == other.seq);
-  }
-};
-static_assert(sizeof(ReqId) == 3);
-
-using RspId = ReqId;
-
 struct __attribute__((packed)) MsgMeta {
   uint32_t entry_hash; // topic/service hash id
   uint32_t sys_nxt : 4;
@@ -76,10 +46,9 @@ struct ReqBase : MsgBase {
 
   bool match(const ReqBase &other) {
     return __meta__.entry_hash == other.__meta__.entry_hash &&
-           __meta__.sys_src    == other.__meta__.sys_dst &&
-           __meta__.sys_dst    == other.__meta__.sys_src &&
-           client == other.client &&
-           seq == other.seq;
+           __meta__.sys_src == other.__meta__.sys_dst &&
+           __meta__.sys_dst == other.__meta__.sys_src &&
+           client == other.client && seq == other.seq;
   }
 };
 static_assert(sizeof(ReqBase) == 16);
