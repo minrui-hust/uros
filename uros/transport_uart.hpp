@@ -1,15 +1,9 @@
 #pragma once
 
 #include "transport_uart.h"
-extern void MyPrintf(const char* format, ...);
-// 数据包处理回调函数
-void handlePacket(const uint8_t* data, uint16_t length) {
-  printf("收到完整数据包，长度: %u, 数据: ", length);
-  for (uint16_t i = 0; i < length; i++) {
-    printf("%02X ", data[i]);
-  }
-  printf("\n");
-}
+
+namespace uros {
+
 uint32_t send_count = 0;
 uint32_t total_send_len = 0;
 uint32_t recv_count = 0;
@@ -18,8 +12,6 @@ uint32_t unpacke_err = 0;
 uint32_t repeat_unpacke = 0;
 uint32_t ret = 0;
 uint32_t buf_overrun = 0;
-
-namespace uros {
 
 inline void TransportUart::initUart(const char* uart_name) {
   // 打开设备
@@ -54,7 +46,7 @@ inline int TransportUart::recv(void* data, size_t len, int* prio,
     recv_count += received;
 
     // 解包
-    packer_.putDataOneByte(recv_buf_, received);
+    packer_.putData(recv_buf_, received);
     // 获取完整数据
     read_buf_len = packer_.getData((uint8_t*)data, len);
     if (read_buf_len > 0) {

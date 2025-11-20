@@ -6,11 +6,7 @@
 #include "string.h"
 
 #define PACKER_BUF_DATA_SIZE 256
-#define PACKER_BUF_SIZE 4
-
-uint32_t unpack_success;
-uint32_t buf_overrun_count;
-uint32_t crc_error;
+#define PACKER_BUF_SIZE 16
 
 struct __attribute__((aligned(4))) Header {
   uint8_t preamble;
@@ -64,8 +60,8 @@ class PacketParser {
 
  public:
   // 构造函数
-  PacketParser(PackerCallback callback = nullptr, uint8_t preamble = 0xAA)
-      : packer_callback_(callback), expected_preamble_(preamble) {}
+  PacketParser( uint8_t preamble = 0xAA, PackerCallback callback = nullptr)
+      : expected_preamble_(preamble), packer_callback_(callback) {}
 
   // 获取最大数据包大小
   uint16_t getMaxPacketSize() const { return MAX_PACKET_SIZE; }
@@ -161,7 +157,6 @@ class PacketParser {
             } else {
               // CRC校验失败
               crc_err_++;
-              crc_error++;
               printf("crc err,header:%d,%d,%d\n", header_.preamble,
                      header_.crc8, header_.len);
               reset();
@@ -233,12 +228,11 @@ class PacketParser {
 
             if (calculated_crc8_ == header_.crc8) {
               // CRC校验成功
-              unpack_success++;
+              // unpack_success++;
 
               // 将解包完成的数据包存起来
               if (write_buf(recv_buf + i, header_.len) == -1) {
                 buf_overrun_++;
-                buf_overrun_count++;
                 printf("packer buf overrun\n");
               }
 
@@ -249,7 +243,7 @@ class PacketParser {
             } else {
               // CRC校验失败
               crc_err_++;
-              printf("crc_err 1:%d\n", crc_err_);
+              printf("crc_err 1:%ld\n", crc_err_);
               reset();
             }
           } else {
@@ -273,30 +267,27 @@ class PacketParser {
               calculated_crc8_ = calculateCRC8(data_buffer_, header_.len);
 
               if (calculated_crc8_ == header_.crc8) {
-                unpack_success++;
+                // unpack_success++;
                 // printf("data_buffer_ crc right\n");
 
                 if (write_buf(data_buffer_, header_.len) == -1) {
                   buf_overrun_++;
-                  buf_overrun_count++;
                   printf("packer buf overrun\n");
                 }
                 reset();
 
               } else {
                 crc_err_++;
-                crc_error++;
-                printf("crc_err 2:%d\n", crc_err_);
+                printf("crc_err 2:%ld\n", crc_err_);
                 printf("header:%x,%x,%x\n", header_.preamble, header_.crc8,
                        header_.len);
-                printf("err seq:%x\n", data_buffer_[4]);
 
                 printf("calculated_crc8_:%x\n", calculated_crc8_);
 
-                for (uint32_t k = 0; k < header_.len; k++) {
-                  printf("%x ", data_buffer_[k]);
-                }
-                printf("\n");
+                // for (uint32_t k = 0; k < header_.len; k++) {
+                //   printf("%x ", data_buffer_[k]);
+                // }
+                // printf("\n");
 
                 reset();
               }
@@ -324,7 +315,6 @@ class PacketParser {
         // 将数据保存起来
         if (write_buf(data_buffer_, header_.len) == -1) {
           buf_overrun_++;
-          buf_overrun_count++;
           printf("packer buf overrun\n");
         }
         reset();
@@ -403,7 +393,6 @@ class PacketParser {
                 repeat_unpacke_++;
                 if (write_buf(recv_buf + i, header_.len) == -1) {
                   buf_overrun_++;
-                  buf_overrun_count++;
                   printf("packer buf overrun\n");
                 }
               }
@@ -413,7 +402,7 @@ class PacketParser {
             } else {
               // CRC校验失败
               crc_err_++;
-              printf("crc_err_:%d\n", crc_err_);
+              printf("crc_err_:%ld\n", crc_err_);
               reset();
             }
           } else {
@@ -450,13 +439,12 @@ class PacketParser {
                   repeat_unpacke_++;
                   if (write_buf(data_buffer_, header_.len) == -1) {
                     buf_overrun_++;
-                    buf_overrun_count++;
                     printf("packer buf overrun\n");
                   }
                 }
               } else {
                 crc_err_++;
-                printf("crc_err_:%d\n", crc_err_);
+                printf("crc_err_:%ld\n", crc_err_);
                 reset();
               }
             }
