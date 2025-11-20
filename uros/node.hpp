@@ -115,6 +115,11 @@ inline void Node::spin() {
 }
 
 inline void Node::spinOnce(int timeout_ms) {
+  if (wait_set_ == 0) {
+    msleep(timeout_ms);
+    return;
+  }
+
   auto flags = evt_.wait(wait_set_, true, false, timeout_ms);
 
   // new event may set when program reach here, the new topic data will
