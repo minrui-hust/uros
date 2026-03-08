@@ -8,8 +8,15 @@
 #include "system.h"
 #include "transport.h"
 
+// ============================================================
+// service.hpp — ServiceBase / ServiceT / ServiceManager 实现
+// ============================================================
+
 namespace uros {
 
+// registerTransport(): 将传输层 tsp 注册到本服务的 tsp_metas_ 数组。
+// tsp_metas_ 以 Transport ID 为下标（稀疏数组）。
+// 注册后，收到来自该传输层的服务广播时，可更新对应的路由距离。
 inline bool ServiceBase::registerTransport(TransportBase *tsp) {
   auto tsp_id = tsp->id();
   if (tsp_id >= tsp_metas_.size()) {
@@ -30,6 +37,8 @@ inline bool ServiceBase::registerTransport(TransportBase *tsp) {
   return true;
 }
 
+// addClient(): 在服务上创建并注册一个 Client。
+// Client 由 Service 持有（unique_ptr），Node 只保存裸指针。
 template <typename Req, typename Rsp>
 ClientT<Req, Rsp> *ServiceT<Req, Rsp>::addClient() {
   if (clis_.full()) {
@@ -46,6 +55,8 @@ ClientT<Req, Rsp> *ServiceT<Req, Rsp>::addClient() {
   return cli;
 }
 
+// addServer(): 在服务上创建并注册一个 Server（绑定回调）。
+// Server 由 Service 持有（unique_ptr），Node 只保存裸指针。
 template <typename Req, typename Rsp>
 ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(const ServiceCallback &cb) {
   if (srvs_.full()) {
@@ -62,6 +73,10 @@ ServerT<Req, Rsp> *ServiceT<Req, Rsp>::addServer(const ServiceCallback &cb) {
   return srv;
 }
 
+// call(cli, req, rsp): 由 Client 发起调用的主入口。
+// 判断本节点是否有本地 Server：
+//   - 有 → localCall()：直接写请求缓冲、等待信号量，无网络开销
+//   - 无 → remoteCall()：通过路由找到最近的传输层，发送请求，等待应答
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(Client *cli, const Req &req, Rsp &rsp,
                               int timeout_ms) {
@@ -73,6 +88,8 @@ bool ServiceT<Req, Rsp>::call(Client *cli, const Req &req, Rsp &rsp,
   }
 }
 
+// call(tsp, req, rsp): 由 Transport 在 serviceWork() 中调用，
+// 处理来自远端节点的服务请求，路径选择同上。
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::call(TransportBase *tsp, const MsgBase *req,
                               MsgBase *rsp, int timeout_ms) {
@@ -85,6 +102,11 @@ bool ServiceT<Req, Rsp>::call(TransportBase *tsp, const MsgBase *req,
   }
 }
 
+// localCall(): 本地服务调用路径。
+// 步骤：
+//   1. 获取 lock_req_（互斥锁），保证同一时刻只有一个调用在处理
+//   2. 填写 sys_dst（本节点）并写入请求缓冲，通知 Server 的 spinOnce()
+//   3. 等待 Server 调用 writeRsp() 后 give 的 sem_rsp_ 信号量
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::localCall(const Req &req, Rsp &rsp, int timeout_ms) {
   UROS_PRINT("localCall on service '0x%x'\n", id_);
@@ -106,6 +128,13 @@ bool ServiceT<Req, Rsp>::localCall(const Req &req, Rsp &rsp, int timeout_ms) {
   return waitRsp(rsp, timeout_now(timeout_ms, enter_ms));
 }
 
+// remoteCall(): 远端服务调用路径。
+// 步骤：
+//   1. 获取 lock_req_
+//   2. findRoute() 找最近路由（跳数最小的 tsp_meta）
+//   3. 填写 sys_dst / sys_nxt 并写入请求缓冲
+//   4. 通过对应传输层发送请求
+//   5. 等待 Transport 收到应答后调用 writeRsp() 触发的信号量
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::remoteCall(TransportBase *from_tsp, const Req &req,
                                     Rsp &rsp, int timeout_ms) {
@@ -135,6 +164,8 @@ bool ServiceT<Req, Rsp>::remoteCall(TransportBase *from_tsp, const Req &req,
   return waitRsp(rsp, timeout_now(timeout_ms, enter_ms));
 }
 
+// findRoute(): 在 tsp_metas_ 中选择路由距离（dist）最小的传输层。
+// 排除 from_tsp（避免请求回路）。dist == INT_MAX 表示该路由不可达。
 template <typename Req, typename Rsp>
 TransportMeta *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
   // find the transport to send request
@@ -159,6 +190,8 @@ TransportMeta *ServiceT<Req, Rsp>::findRoute(TransportBase *from_tsp) {
   return nullptr;
 }
 
+// writeServiceBroadcast(Server): 来自本地 Server 的广播。
+// 更新本地广播记录（仅序号判断），然后向所有传输层转发。
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv,
                                                const ServiceBroadcast &sbc) {
@@ -169,6 +202,9 @@ void ServiceT<Req, Rsp>::writeServiceBroadcast(Server *srv,
   }
 }
 
+// writeServiceBroadcast(tsp): 来自传输层的远端广播。
+// 如果本节点有本地 Server，忽略该广播（多 Server 场景可能引发问题，已记录日志）。
+// 否则更新路由记录（序号+距离双条件），然后转发给其他传输层。
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
                                                const MsgBase *msg) {
@@ -187,6 +223,8 @@ void ServiceT<Req, Rsp>::writeServiceBroadcast(TransportBase *tsp,
   }
 }
 
+// writeReq(): 在临界区内更新请求缓冲并递增版本号，
+// 然后通知所有本地 Server（设置其事件位，触发 Node::spinOnce()）。
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeReq(const Req &req) {
   UROS_PRINT("service '0x%x' writeReq\n", id_);
@@ -200,6 +238,10 @@ void ServiceT<Req, Rsp>::writeReq(const Req &req) {
   }
 }
 
+// waitRsp(): 等待 Server 写回应答（超时返回 false）。
+// 使用循环 + 信号量：Server 每次 writeRsp() 后 give 信号量，
+// Client 取到信号量后验证 req/rsp 匹配（防止旧应答误匹配），
+// 匹配失败则继续等待，直到超时。
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
   int64_t enter_ms = now_ms();
@@ -236,6 +278,8 @@ bool ServiceT<Req, Rsp>::waitRsp(Rsp &rsp, int timeout_ms) {
   return true;
 }
 
+// readReq(): 由 Server::spinOnce() 调用，以版本比较方式读取最新请求。
+// 若请求版本 > 本地版本，则读取并更新版本，返回 true。
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
   LockGuard<CriticalLock> lg;
@@ -247,16 +291,19 @@ bool ServiceT<Req, Rsp>::readReq(Req &req, int &ver) {
   return false;
 }
 
+// writeRsp(Server): 来自本地 Server 的应答，委托给 writeRsp(Rsp)
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeRsp(Server *srv, const Rsp &rsp) {
   writeRsp(rsp);
 }
 
+// writeRsp(tsp): 来自传输层的远端应答（由 TransportBase::recvResponse() 调用）
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeRsp(TransportBase *from_tsp, const MsgBase *rsp) {
   writeRsp(*static_cast<const Rsp *>(rsp));
 }
 
+// writeRsp(rsp): 在临界区内更新应答缓冲，然后 give 信号量唤醒 waitRsp()
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
   {
@@ -266,6 +313,8 @@ void ServiceT<Req, Rsp>::writeRsp(const Rsp &rsp) {
   sem_rsp_.give();
 }
 
+// updateServiceBroadcast(sbc, seq): 更新本地广播记录（来自本地 Server）。
+// 仅在序号更新时（seq > sbc_.seq）才更新，使用有符号 int16_t 差值处理回绕。
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::updateServiceBroadcast(const ServiceBroadcast &sbc,
                                                 int seq) {
@@ -278,6 +327,11 @@ bool ServiceT<Req, Rsp>::updateServiceBroadcast(const ServiceBroadcast &sbc,
   return false;
 }
 
+// updateServiceBroadcast(tsp, sbc, seq): 更新远端广播路由记录。
+// 更新条件（二选一）：
+//   1. 序号更新（seq > sbc_.seq）
+//   2. 序号相同但距离更短（better_dist）
+// 同时更新 tsp_meta 中的路由信息（dist, sys_nxt, sys_dst）。
 template <typename Req, typename Rsp>
 bool ServiceT<Req, Rsp>::updateServiceBroadcast(TransportBase *tsp,
                                                 const ServiceBroadcast &sbc,
@@ -294,8 +348,8 @@ bool ServiceT<Req, Rsp>::updateServiceBroadcast(TransportBase *tsp,
     sbc_.seq = seq;
     if (better_dist) {
       meta->dist = sbc.dist;
-      meta->sys_nxt = sbc.__meta__.sys_pre;
-      meta->sys_dst = sbc.__meta__.sys_src;
+      meta->sys_nxt = sbc.__meta__.sys_pre; // 下一跳 = 广播的前一跳
+      meta->sys_dst = sbc.__meta__.sys_src; // 目标 = 广播的原始来源
     }
     return true;
   }
@@ -303,6 +357,8 @@ bool ServiceT<Req, Rsp>::updateServiceBroadcast(TransportBase *tsp,
   return false;
 }
 
+// forwardServiceBroadcast(): 将服务广播转发给所有已注册的传输层（排除来源 tsp）。
+// 转发前设置 sys_pre = 本节点 ID，以便下一跳能正确记录路径。
 template <typename Req, typename Rsp>
 void ServiceT<Req, Rsp>::forwardServiceBroadcast(TransportBase *tsp_from,
                                                  const ServiceBroadcast &sbc) {
@@ -314,6 +370,7 @@ void ServiceT<Req, Rsp>::forwardServiceBroadcast(TransportBase *tsp_from,
   }
 }
 
+// addService(): 创建新服务并加入全局列表
 template <typename Service>
 Service *ServiceManager::addService(const char *name) {
   if (services_.full()) {
@@ -327,6 +384,7 @@ Service *ServiceManager::addService(const char *name) {
   return service;
 }
 
+// findService(): 按名称查找服务，并验证请求/应答类型匹配
 template <typename Service>
 Service *ServiceManager::findService(const char *name) {
   for (auto &srv : services_) {
